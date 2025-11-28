@@ -1,0 +1,35 @@
+# config.yaml
+settings:
+  environment_name: "Producción -> QA"
+  batch_size: 1000  # (Requerimiento 9: Rendimiento por lotes)
+
+source_db:
+  type: "postgresql"
+  host: "localhost"
+  port: 5432
+  db_name: "db_produccion"
+
+target_db:
+  type: "postgresql"
+  host: "localhost"
+  port: 5432
+  db_name: "db_qa"
+
+# (Requerimiento 1: Tablas, filtros y límites)
+tables:
+  - name: "clientes"
+    source_table: "clientes"
+    target_table: "clientes"
+    filter_column: "fecha_registro" # Para cargas incrementales
+    masking_rules:
+      nombre_completo: "fake_name"
+      email: "hash_email"
+      telefono: "preserve_format"
+      direccion: "redact" # "****"
+
+  - name: "ordenes"
+    source_table: "ordenes"
+    filter_column: "fecha_orden"
+    masking_rules:
+      total: "none" # Pasar tal cual
+      
