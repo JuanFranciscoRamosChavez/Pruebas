@@ -1,0 +1,84 @@
+/* 10-responsive.css — media queries y ajustes responsivos */
+@media (max-width: 1100px) {
+  .guiado-layout {
+    flex-direction: column; /* Apilar verticalmente */
+    overflow: auto;
+  }
+
+  .cuaderno-sidebar {
+    width: 100%; /* Ancho completo */
+    height: auto;
+    flex: none;
+    max-height: 300px; /* Altura limitada en móvil */
+    order: 1; /* Mover al final */
+    overflow: visible;
+  }
+
+  #pistas-container {
+    width: 100%;
+    height: auto;
+    flex: none;
+    order: 2; /* Pistas primero */
+    border-top: 2px solid var(--amber-dark);
+    margin-top: 2rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .header {
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 1rem;
+  }
+
+  .header h2 {
+    font-size: 1.5rem;
+  }
+
+  .timer {
+    font-size: 2rem;
+    min-width: auto;
+    padding: 0.2rem 1rem;
+  }
+
+  .briefing-suspects {
+    padding: 1.5rem;
+  }
+
+  .briefing-suspects h1 {
+    font-size: 2rem;
+  }
+
+  .suspect-card strong {
+    font-size: 1.5rem;
+  }
+
+  .btn-expediente {
+    font-size: 1rem;
+    padding: 1rem;
+  }
+
+  .landing-header {
+    position: static;
+    width: 100%;
+    align-items: center;
+    margin-bottom: 1rem;
+    background: rgba(0, 0, 0, 0.3);
+    padding: 1rem;
+    border-radius: 1rem;
+  }
+
+  .landing-content {
+    margin-top: 0;
+  }
+
+  .modes {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .mode-card {
+    width: 100%;
+    max-width: 350px;
+  }
+}

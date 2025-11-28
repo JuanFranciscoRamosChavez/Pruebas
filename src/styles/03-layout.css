@@ -1,0 +1,56 @@
+/* 03-layout.css — layout y contenedores generales */
+/* Aquí puedes mover reglas como .page, .header, .guiado-layout, #pistas-container, .cuaderno-sidebar */
+
+/* PÁGINAS */
+.page {
+  display: none;
+  height: 100vh; /* Ocupa toda la pantalla */
+  width: 100vw;
+  overflow: hidden; /* Prohíbe el scroll en el cuerpo principal */
+  padding: 1rem;
+  box-sizing: border-box;
+}
+.page.active {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--darker);
+  padding: 1rem 2rem;
+  border-radius: 1rem;
+  border: 1px solid #333;
+  margin-bottom: 2rem;
+  box-shadow: 0 0 15px rgba(0, 0, 0, 0.5);
+}
+
+/* LAYOUT GUIADO */
+.guiado-layout {
+  display: flex;
+  gap: 2rem;
+  align-items: flex-start;
+}
+
+/* Contenedor de Pistas (Izquierda en PC) */
+#pistas-container {
+  min-height: 75vh;
+  background: #0a0a0a;
+  border-radius: 1.5rem;
+  padding: 2rem 0;
+  position: relative;
+}
+
+/* Contenedor del Cuaderno (Derecha en PC) */
+.cuaderno-sidebar {
+  width: 350px; /* Ancho fijo */
+  flex-shrink: 0; /* No dejar que se aplaste */
+  height: 100%; /* Altura completa */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden; /* El scroll lo maneja el hijo */
+}

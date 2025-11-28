@@ -1,0 +1,185 @@
+/* 05-pistas-cuaderno.css — estilos para pistas y cuaderno */
+.cuaderno-container {
+  height: 100%;
+  overflow-y: auto; /* Scroll interno */
+  padding: 1.5rem; /* Espacio interno cómodo */
+  border-image: linear-gradient(45deg, var(--amber), var(--amber-dark)) 1;
+  border-radius: 1.5rem;
+  background: linear-gradient(135deg, #0a0a0a 0%, #111 100%);
+  box-shadow: 0 0 30px rgba(245, 158, 11, 0.15);
+}
+
+.cuaderno-container::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 28px,
+    rgba(245, 158, 11, 0.03) 28px,
+    rgba(245, 158, 11, 0.03) 30px
+  );
+  pointer-events: none;
+  z-index: 1;
+}
+
+.cuaderno-container h3 {
+  color: var(--amber);
+  font-family: "Orbitron", monospace;
+  font-size: 1.4rem;
+  margin-bottom: 1rem;
+}
+
+.cuaderno-container ul {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 2rem 0;
+  position: relative;
+  z-index: 2;
+}
+
+/* PISTAS */
+.pista-card {
+  opacity: 0;
+  transform: translateY(40px);
+  transition: all 0.8s cubic-bezier(0.25, 0.8, 0.25, 1);
+  perspective: 1000px;
+  width: 100%;
+  margin-bottom: 1.5rem;
+}
+
+.pista-card.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.pista-card-inner {
+  position: relative;
+  width: 100%;
+  min-height: 400px;
+  transition: transform 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  transform-style: preserve-3d;
+}
+
+.pista-card.flipped .pista-card-inner {
+  transform: rotateY(180deg);
+  min-height: 200px; /* El reverso puede ser pequeño */
+}
+
+.pista-card-front,
+.pista-card-back {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  backface-visibility: hidden;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(135deg, #111 0%, #1a1a1a 100%);
+  border: 2px solid var(--amber);
+  border-radius: 1.5rem;
+  padding: 1.5rem;
+  box-shadow: inset 0 0 30px rgba(245, 158, 11, 0.1);
+}
+
+.pista-card-back {
+  transform: rotateY(180deg);
+  border-color: var(--purple);
+  justify-content: space-between;
+  background: linear-gradient(135deg, #1a1a1a 0%, #111 100%);
+  box-shadow: 0 0 35px rgba(124, 58, 237, 0.5),
+    inset 0 0 40px rgba(124, 58, 237, 0.08);
+}
+
+.pista-title {
+  font-family: "Orbitron", monospace;
+  font-size: 1.6rem;
+  color: var(--amber);
+  text-shadow: 0 0 20px var(--amber);
+  margin: 0 0 0.5rem 0;
+  flex-shrink: 0;
+}
+
+.pista-briefing,
+.pista-conclusion {
+  color: #94a3b8;
+  line-height: 1.5;
+  font-size: 1rem;
+  margin: 1rem;
+  flex-grow: 1;
+  overflow-y: auto;
+}
+
+.pista-completada {
+  color: #c4b5fd;
+  font-size: 1.4rem;
+  font-weight: bold;
+  text-shadow: 0 0 15px var(--purple);
+  text-align: center;
+}
+
+.opciones-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+  margin-top: 1rem;
+}
+
+.btn-opcion-pista {
+  background: linear-gradient(
+    135deg,
+    rgba(245, 158, 11, 0.2),
+    rgba(124, 58, 237, 0.15)
+  );
+  color: #e5e7eb;
+  border: 2px solid var(--amber);
+  padding: 1.4rem 2rem;
+  border-radius: 1rem;
+  font-family: "Orbitron", monospace;
+  font-weight: 700;
+  font-size: 1.1rem;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.4s ease;
+  box-shadow: 0 8px 25px rgba(245, 158, 11, 0.3);
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-opcion-pista:hover {
+  background: linear-gradient(
+    135deg,
+    rgba(245, 158, 11, 0.4),
+    rgba(124, 58, 237, 0.3)
+  );
+  border-color: #fcd34d;
+  color: white;
+  transform: translateY(-6px);
+  box-shadow: 0 18px 40px rgba(245, 158, 11, 0.6);
+  text-shadow: 0 0 15px var(--amber);
+}
+
+.btn-opcion-pista::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(245, 158, 11, 0.4),
+    transparent
+  );
+  transition: left 0.7s;
+}
+
+.btn-opcion-pista:hover::before {
+  left: 100%;
+}

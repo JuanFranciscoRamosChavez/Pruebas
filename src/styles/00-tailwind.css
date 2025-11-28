@@ -1,0 +1,4 @@
+/* 00-tailwind.css — Directivas Tailwind */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;

@@ -1,0 +1,165 @@
+/* 09-animations.css — keyframes y clases de animación */
+@keyframes glitch {
+  0%,
+  100% {
+    text-shadow: 0 0 10px var(--amber), 0 0 20px var(--amber);
+  }
+  50% {
+    text-shadow: 2px 2px 0 #dc2626, -2px -2px 0 #7c3aed;
+  }
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+@keyframes strike {
+  0% {
+    transform: scaleX(0);
+  }
+  100% {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes scan {
+  0% {
+    transform: translateY(-50%);
+  }
+  100% {
+    transform: translateY(100%);
+  }
+}
+
+@keyframes card-scan {
+  0% {
+    transform: translateY(-100%);
+  }
+  100% {
+    transform: translateY(200%);
+  }
+}
+
+@keyframes blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+@keyframes pulseNuclear {
+  0%,
+  100% {
+    box-shadow: 0 0 120px #ff0000;
+  }
+  50% {
+    box-shadow: 0 0 180px #ff3333;
+  }
+}
+
+@keyframes glitchRed {
+  0%,
+  100% {
+    text-shadow: 0 0 40px #ff3333;
+  }
+  50% {
+    text-shadow: 6px 6px 0 #880000, -6px -6px 0 #440000;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes pulseBg {
+  0% {
+    transform: scale(1);
+    opacity: 0.8;
+  }
+  50% {
+    transform: scale(1.05);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0.8;
+  }
+}
+
+@keyframes glowVictory {
+  from {
+    text-shadow: 0 0 20px #00ff41, 0 0 40px #00ff41;
+  }
+  to {
+    text-shadow: 0 0 40px #00ff41, 0 0 80px #00ff41, 0 0 120px #00ff41;
+  }
+}
+
+@keyframes pulseDefeat {
+  0%,
+  100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+
+@keyframes glitchDefeat {
+  0%,
+  100% {
+    text-shadow: 0 0 40px #ff0033;
+  }
+  20% {
+    text-shadow: 10px 10px 0 #880000;
+  }
+  40% {
+    text-shadow: -10px -10px 0 #440000;
+  }
+  60% {
+    text-shadow: 8px -8px 0 #ff0033;
+  }
+  80% {
+    text-shadow: -8px 8px 0 #880000;
+  }
+}
+
+@keyframes pulseVictory {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
+@keyframes appearFinal {
+  0% { transform: translateY(20px); opacity: 0; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes shine {
+  0% { left: -100%; }
+  100% { left: 100%; }
+}
+
+@keyframes float {
+  0% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+  100% { transform: translateY(0); }
+}

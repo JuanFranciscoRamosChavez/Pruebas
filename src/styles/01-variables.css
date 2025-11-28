@@ -1,0 +1,10 @@
+/* 01-variables.css — Variables CSS globales */
+:root {
+  --amber: #f59e0b;
+  --amber-dark: #92400e;
+  --purple: #7c3aed;
+  --red: #dc2626;
+  --dark: #0a0a0a;
+  --darker: #111;
+  --gray: #1f2937;
+}

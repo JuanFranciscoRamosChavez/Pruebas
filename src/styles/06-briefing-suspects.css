@@ -1,0 +1,65 @@
+/* 06-briefing-suspects.css — briefing, suspect cards, expediente */
+.briefing-suspects {
+  margin: 0 auto 2rem auto;
+  max-width: 1000px;
+  background: #050505;
+  border: 2px solid var(--amber);
+  border-radius: 2rem;
+  padding: 2rem;
+  box-shadow: 0 0 60px rgba(245,158,11,0.4);
+  position: relative; 
+  overflow: hidden;
+}
+
+.briefing-suspects h1 {
+  font-family: "Orbitron", monospace;
+  font-size: 4rem;
+  font-weight: 900;
+  text-align: center;
+  color: var(--amber);
+  text-shadow: 0 0 20px var(--amber), 0 0 40px var(--amber),
+    0 0 80px var(--amber);
+  letter-spacing: 8px;
+  margin: 0 0 1rem 0;
+  animation: flicker 4s infinite alternate;
+}
+
+.suspect-card {
+  background: rgba(10, 10, 10, 0.7);
+  border: 1px solid var(--amber);
+  border-radius: 1.6rem;
+  padding: 2rem 2.4rem;
+  margin: 3rem 0;
+  position: relative;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), 0 0 30px rgba(245, 158, 11, 0.2),
+    inset 0 0 40px rgba(245, 158, 11, 0.05);
+  transition: all 0.5s ease;
+  overflow: hidden;
+}
+
+.btn-expediente {
+  width: 100%;
+  text-align: left;
+  padding: 1.5rem 2rem;
+  border-radius: 1rem;
+  border: 2px solid;
+  font-family: "Orbitron", monospace;
+  font-size: 1.4rem;
+  letter-spacing: 2px;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.suspect-detail-card {
+  background: rgba(10, 10, 10, 0.8);
+  border: 1px solid var(--amber-dark);
+  border-top: none;
+  border-radius: 0 0 1rem 1rem;
+  padding: 2rem;
+  margin-top: -0.5rem;
+  margin-bottom: 1rem;
+  animation: slideDown 0.5s ease-out;
+}
