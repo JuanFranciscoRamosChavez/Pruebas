@@ -2,16 +2,29 @@ import { Layout } from "@/components/Layout";
 import { Header } from "@/components/Header";
 import { MaskingRuleCard } from "@/components/MaskingRuleCard";
 import { Button } from "@/components/ui/button";
-import { Plus, Filter, Info } from "lucide-react";
+import { Plus, Filter, Info, Lock } from "lucide-react";
 import { mockMaskingRules } from "@/data/mockData";
 import { useState } from "react";
 import { toast } from "sonner";
 import { MaskingRule } from "@/types/pipeline";
 
-const Masking = () => {
+// 1. Definimos que recibe el rol
+interface MaskingProps {
+  userRole?: string;
+}
+
+const Masking = ({ userRole }: MaskingProps) => {
   const [rules, setRules] = useState<MaskingRule[]>(mockMaskingRules);
 
   const handleToggleRule = (id: string, isActive: boolean) => {
+    // 2. Seguridad: Bloquear modificación si no es admin
+    if (userRole !== 'admin') {
+      toast.error("Acceso Denegado", { 
+        description: "Solo los desarrolladores pueden modificar las reglas de enmascaramiento." 
+      });
+      return;
+    }
+
     setRules(prev => 
       prev.map(rule => 
         rule.id === id ? { ...rule, isActive } : rule
@@ -49,17 +62,35 @@ const Masking = () => {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Button variant="outline" size="sm">
-              <Filter className="h-4 w-4" />
+              <Filter className="h-4 w-4 mr-2" />
               Filtrar
             </Button>
             <p className="text-sm text-muted-foreground">
               {activeCount} de {rules.length} reglas activas
             </p>
+
+            {/* Indicador Visual de Rol */}
+            <span className={`text-xs px-2 py-1 rounded font-bold border ml-2 ${
+              userRole === 'admin' 
+                ? 'bg-purple-100 text-purple-700 border-purple-200' 
+                : 'bg-blue-100 text-blue-700 border-blue-200'
+            }`}>
+              {userRole === 'admin' ? 'DESARROLLADOR' : 'OPERADOR'}
+            </span>
           </div>
-          <Button>
-            <Plus className="h-4 w-4" />
-            Nueva Regla
-          </Button>
+
+          {/* 3. Botón Condicional */}
+          {userRole === 'admin' ? (
+            <Button onClick={() => toast.info("La creación se gestiona en config.yaml")}>
+              <Plus className="h-4 w-4 mr-2" />
+              Nueva Regla
+            </Button>
+          ) : (
+            <Button disabled variant="secondary" className="opacity-70 cursor-not-allowed">
+              <Lock className="h-4 w-4 mr-2" />
+              Solo Lectura
+            </Button>
+          )}
         </div>
 
         {/* Rules Grid */}
