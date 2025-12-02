@@ -1,35 +1,24 @@
-# config.yaml
 settings:
-  environment_name: "Producción -> QA"
-  batch_size: 1000  # (Requerimiento 9: Rendimiento por lotes)
+  app_name: "DataMask ETL"
+  batch_size: 500
+  extraction_window_days: 90  
 
-source_db:
-  type: "postgresql"
-  host: "localhost"
-  port: 5432
-  db_name: "db_produccion"
+databases:
+  source_db_env_var: "SUPABASE_PROD_URI"
+  target_db_env_var: "SUPABASE_QA_URI"
 
-target_db:
-  type: "postgresql"
-  host: "localhost"
-  port: 5432
-  db_name: "db_qa"
-
-# (Requerimiento 1: Tablas, filtros y límites)
 tables:
   - name: "clientes"
-    source_table: "clientes"
-    target_table: "clientes"
-    filter_column: "fecha_registro" # Para cargas incrementales
+    pk: "id"
+    filter_column: "fecha_registro"
     masking_rules:
-      nombre_completo: "fake_name"
+      nombre: "fake_name"
       email: "hash_email"
       telefono: "preserve_format"
-      direccion: "redact" # "****"
+      direccion: "redact"
 
   - name: "ordenes"
-    source_table: "ordenes"
-    filter_column: "fecha_orden"
+    pk: "id"
+    filter_column: "fecha"        
     masking_rules:
-      total: "none" # Pasar tal cual
-      
+      total: "none"
