@@ -5,27 +5,40 @@ from faker import Faker
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
 
-# Cargar configuración segura
+# 1. Cargar configuración y rutas
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(os.path.join(BASE_DIR, '.env'))
+
 with open(os.path.join(BASE_DIR, 'config.yaml'), 'r') as f:
     config = yaml.safe_load(f)
 
 fake = Faker('es_MX')
 
 def init_tables():
-    # ... (conexión igual que antes) ...
+    # 2. Obtener conexiones seguras desde el .env
+    source_env_var = config['databases']['source_db_env_var']
+    target_env_var = config['databases']['target_db_env_var']
+    
+    prod_uri = os.getenv(source_env_var)
+    qa_uri = os.getenv(target_env_var)
+    
+    # Validación de seguridad
+    if not prod_uri or not qa_uri:
+        print(f" Error: No se encontraron las variables de entorno {source_env_var} o {target_env_var}")
+        return
+
     engine_prod = create_engine(prod_uri)
     engine_qa = create_engine(qa_uri)
     
     # ---------------------------------------------------------
-    # 1. PREPARAR PRODUCCIÓN (3 TABLAS)
+    # 3. PREPARAR PRODUCCIÓN (3 TABLAS CON DATOS)
     # ---------------------------------------------------------
     print(f" Conectando a Producción...")
     with engine_prod.connect() as conn:
-        # Borramos en cascada para limpiar todo
+        # Borrar tablas viejas para reiniciar limpio
         conn.execute(text("DROP TABLE IF EXISTS detalle_ordenes, ordenes, clientes CASCADE"))
         
+        # Crear esquema
         conn.execute(text("""
             CREATE TABLE clientes (
                 id SERIAL PRIMARY KEY,
@@ -41,7 +54,6 @@ def init_tables():
                 total DECIMAL(10, 2),
                 fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
-            -- 3ra Tabla Relacionada (Requisito PDF)
             CREATE TABLE detalle_ordenes (
                 id SERIAL PRIMARY KEY,
                 orden_id INTEGER REFERENCES ordenes(id),
@@ -51,7 +63,10 @@ def init_tables():
             );
         """))
         
-        print(" Sembrando datos en Producción (Nivel 1: Clientes)...")
+        # Generar Datos Falsos (Semilla)
+        print(" Sembrando datos en Producción...")
+        
+        # Clientes
         for _ in range(50): 
             conn.execute(text(
                 "INSERT INTO clientes (nombre, email, telefono, direccion) VALUES (:n, :e, :t, :d)"
@@ -62,27 +77,25 @@ def init_tables():
                 "d": fake.address()
             })
         
-        print("🌱 Sembrando datos en Producción (Nivel 2: Órdenes)...")
+        # Órdenes
         for _ in range(100): 
             conn.execute(text("INSERT INTO ordenes (cliente_id, total) VALUES (:c, :t)"), 
                          {"c": random.randint(1, 50), "t": random.uniform(100, 5000)})
-                         
-        print("🌱 Sembrando datos en Producción (Nivel 3: Detalles)...")
-        for _ in range(200): # 2 detalles por orden aprox
-            conn.execute(text("""
-                INSERT INTO detalle_ordenes (orden_id, producto, cantidad, precio_unitario) 
-                VALUES (:o, :p, :c, :pu)
-            """), {
-                "o": random.randint(1, 100),
-                "p": fake.word().capitalize() + " " + fake.word(), # Nombre producto random
-                "c": random.randint(1, 10),
-                "pu": random.uniform(10, 500)
-            })
+        
+        # Detalles (La 3ra tabla)
+        for _ in range(200):
+            conn.execute(text("INSERT INTO detalle_ordenes (orden_id, producto, cantidad, precio_unitario) VALUES (:o, :p, :c, :pu)"), 
+                         {
+                             "o": random.randint(1, 100), 
+                             "p": fake.word().capitalize() + " " + fake.word(), 
+                             "c": random.randint(1, 10), 
+                             "pu": random.uniform(10, 500)
+                         })
         
         conn.commit()
 
     # ---------------------------------------------------------
-    # 2. PREPARAR QA (ESQUEMA VACÍO)
+    # 4. PREPARAR QA (ESQUEMA VACÍO)
     # ---------------------------------------------------------
     print(f" Conectando a QA...")
     with engine_qa.connect() as conn:
@@ -91,7 +104,7 @@ def init_tables():
             CREATE TABLE clientes (
                 id INTEGER PRIMARY KEY,
                 nombre VARCHAR(100),
-                email VARCHAR(200), -- Hash
+                email VARCHAR(200),
                 telefono VARCHAR(50),
                 direccion VARCHAR(200),
                 fecha_registro TIMESTAMP
@@ -105,7 +118,7 @@ def init_tables():
             CREATE TABLE detalle_ordenes (
                 id INTEGER PRIMARY KEY,
                 orden_id INTEGER,
-                producto VARCHAR(100), -- Aquí aplicaremos máscara
+                producto VARCHAR(100),
                 cantidad INTEGER,
                 precio_unitario DECIMAL(10, 2)
             );
@@ -120,9 +133,7 @@ def init_tables():
         """))
         conn.commit()
     
-    print(" ¡Base de datos regenerada con 3 tablas relacionadas!")
-    
-    print(" ¡Entornos listos! Datos en Producción y Tablas vacías en QA.")
+    print(" ¡Base de datos inicializada con éxito (3 tablas)!")
 
 if __name__ == "__main__":
     init_tables()
