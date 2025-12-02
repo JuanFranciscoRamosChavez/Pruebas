@@ -9,7 +9,7 @@ from sqlalchemy import create_engine, text
 from faker import Faker
 from dotenv import load_dotenv
 
-# Configuración
+# Configuración de rutas y entorno
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(os.path.join(BASE_DIR, '.env'))
 
@@ -18,24 +18,29 @@ logger = logging.getLogger(__name__)
 
 class ETLEngine:
     def __init__(self):
-        # Configuración básica
-        with open(os.path.join(BASE_DIR, 'config.yaml'), 'r') as f:
+        # PUNTO 1: Configuración Paramétrica
+        config_path = os.path.join(BASE_DIR, 'config.yaml')
+        with open(config_path, 'r') as f:
             self.config = yaml.safe_load(f)
         
         self.faker = Faker('es_MX')
         self.salt = os.getenv("HASH_SALT", "default_salt").encode()
-        self.max_retries = 3  # Requerimiento 6: Intentar hasta N veces
-        self.retry_wait = 2   # Segundos de espera (constante, no exponencial)
-
+        
+        # Configuración de Reintentos (PUNTO 6)
+        self.max_retries = 3  
+        self.retry_wait = 2   
+        
+        # PUNTO 8: Seguridad (Credenciales ocultas)
         try:
             prod_uri = os.getenv(self.config['databases']['source_db_env_var'])
             qa_uri = os.getenv(self.config['databases']['target_db_env_var'])
             self.engine_prod = create_engine(prod_uri, pool_pre_ping=True)
             self.engine_qa = create_engine(qa_uri, pool_pre_ping=True)
         except Exception as e:
-            logger.error(f" Error crítico de conexión inicial: {e}")
+            logger.error(f" Error crítico de configuración: {e}")
             raise
 
+    # PUNTO 2: Enmascaramiento
     def mask_value(self, value, rule):
         if value is None: return None
         if rule == 'hash_email':
@@ -45,11 +50,10 @@ class ETLEngine:
         elif rule == 'redact': return "****"
         return value
 
+    # PUNTO 5: Auditoría
     def log_audit(self, table, records, status, error=None):
         try:
             with self.engine_qa.connect() as conn:
-                # Nos aseguramos de cortar el mensaje de error para que quepa en TEXT
-                msg = str(error)[:500] if error else "OK"
                 conn.execute(text("""
                     INSERT INTO auditoria (tabla, registros_procesados, estado, mensaje, fecha_ejecucion)
                     VALUES (:t, :r, :s, :m, :f)
@@ -57,67 +61,84 @@ class ETLEngine:
                     "t": table, 
                     "r": records, 
                     "s": status, 
-                    "m": msg, 
+                    "m": str(error)[:500] if error else "OK", 
                     "f": datetime.now()
                 })
                 conn.commit()
         except Exception as e:
-            logger.error(f" Fallo al escribir en auditoría (posible caída de QA): {e}")
+            logger.error(f" Fallo crítico en auditoría: {e}")
 
+    # PUNTO 4: Lógica Incremental (Marca de Agua)
+    def get_max_date(self, table, col):
+        try:
+            with self.engine_qa.connect() as conn:
+                return conn.execute(text(f"SELECT MAX({col}) FROM {table}")).scalar()
+        except Exception: return None
+
+    # Procesamiento individual por tabla con Reintentos
     def process_table(self, table_conf):
-        """Lógica de procesamiento de una sola tabla con reintentos"""
-        table_name = table_conf['name']
+        table = table_conf['name']
+        pk = table_conf['pk']
         filter_col = table_conf.get('filter_column')
-        dias = self.config['settings'].get('extraction_window_days', 90)
         
-        # --- BUCLE DE REINTENTOS (REQ 6) ---
+        # Bucle de Reintentos (PUNTO 6)
         for attempt in range(1, self.max_retries + 1):
             try:
-                logger.info(f" Procesando {table_name} (Intento {attempt}/{self.max_retries})...")
+                logger.info(f" Procesando {table} (Intento {attempt}/{self.max_retries})...")
                 
-                # 1. Extracción
-                query = f"SELECT * FROM {table_name}"
-                if filter_col:
-                    query += f" WHERE {filter_col} >= NOW() - INTERVAL '{dias} days'"
+                # 1. Detectar Delta (PUNTO 4)
+                last_date = self.get_max_date(table, filter_col)
+                query = f"SELECT * FROM {table}"
+                mode = "FULL"
                 
+                if last_date and filter_col:
+                    query += f" WHERE {filter_col} > '{last_date}'"
+                    mode = "INCREMENTAL"
+                
+                # 2. Extracción
                 df = pd.read_sql(query, self.engine_prod)
                 
                 if df.empty:
-                    logger.info(f"    Sin datos recientes en {table_name}.")
-                    return # Terminamos con éxito (sin hacer nada)
+                    logger.info(f"    {table}: Sin novedades.")
+                    return # Éxito (nada que hacer)
 
-                # 2. Transformación
+                logger.info(f"    {table}: {len(df)} registros nuevos ({mode}).")
+
+                # 3. Transformación (PUNTO 2)
                 for col, rule in table_conf.get('masking_rules', {}).items():
                     if col in df.columns:
                         df[col] = df[col].apply(lambda x: self.mask_value(x, rule))
 
-                # 3. Carga
+                # 4. Carga con Idempotencia (PUNTO 7 - Upsert simulado)
                 with self.engine_qa.connect() as conn:
-                    # Limpieza (Carga Completa simulada para integridad)
-                    conn.execute(text(f"TRUNCATE TABLE {table_name} CASCADE"))
-                    conn.commit()
+                    if not df.empty:
+                        ids = tuple(df[pk].tolist())
+                        if ids:
+                            # Truco para tupla de 1 elemento en SQL
+                            id_str = str(ids) if len(ids) > 1 else f"({ids[0]})"
+                            # Borramos lo viejo antes de meter lo nuevo (evita duplicados)
+                            conn.execute(text(f"DELETE FROM {table} WHERE {pk} IN {id_str}"))
+                            conn.commit()
                 
-                df.to_sql(table_name, self.engine_qa, if_exists='append', index=False, method='multi', chunksize=500)
+                # Insertar en lotes (PUNTO 9)
+                df.to_sql(table, self.engine_qa, if_exists='append', index=False, method='multi', chunksize=500)
                 
-                # Éxito: Logueamos y salimos del bucle de reintentos
-                self.log_audit(table_name, len(df), "SUCCESS")
-                logger.info(f" {len(df)} registros migrados en {table_name}.")
+                # Log final y SALIDA del bucle
+                self.log_audit(table, len(df), f"SUCCESS - {mode}")
+                logger.info(f" {table}: Sincronización completada.")
                 return 
 
             except Exception as e:
                 logger.error(f" Fallo en intento {attempt}: {e}")
-                
-                if attempt == self.max_retries:
-                    # Si fue el último intento, registramos el ERROR definitivo
-                    logger.error(f" Se agotaron los reintentos para {table_name}.")
-                    self.log_audit(table_name, 0, "ERROR", f"Max retries exceeded: {e}")
-                else:
-                    # Si quedan intentos, esperamos un poco
-                    logger.info(f" Reintentando en {self.retry_wait} segundos...")
+                if attempt < self.max_retries:
                     time.sleep(self.retry_wait)
+                else:
+                    # Si se acaban los intentos, registramos error final
+                    logger.error(f" {table}: Se agotaron los reintentos.")
+                    self.log_audit(table, 0, "ERROR", str(e))
 
     def run_pipeline(self):
-        logger.info(" Iniciando Pipeline con Tolerancia a Fallos...")
+        logger.info(" Iniciando Pipeline Maestro...")
         for table_conf in self.config['tables']:
             self.process_table(table_conf)
 
