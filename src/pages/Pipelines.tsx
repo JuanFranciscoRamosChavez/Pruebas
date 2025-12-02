@@ -47,20 +47,42 @@ const Pipelines = () => {
     setPipelines(prev => prev.map(p => p.id === id ? { ...p, status: 'running' } : p));
     toast.info("Iniciando Migración Real...", { description: "Backend Python procesando Supabase..." });
 
-    try {
+try {
+      // 2. Petición REAL al Backend
       const response = await fetch('http://localhost:5000/api/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       });
-      const data = await response.json();
 
+      // Intentamos leer el JSON, pero prevenimos errores si el backend no devuelve JSON válido
+      let data;
+      try {
+        data = await response.json();
+      } catch (jsonError) {
+        console.warn("El servidor no devolvió JSON:", jsonError);
+        data = { message: "Operación completada (sin detalles)" };
+      }
+
+      // Verificamos si la respuesta fue exitosa (Códigos 200-299)
       if (response.ok) {
+        // 3. Éxito: Actualizar UI a "Exitoso" (Verde)
         setPipelines(prev => prev.map(p => 
-          p.id === id ? { ...p, status: 'success', lastRun: new Date().toISOString(), recordsProcessed: 150 } : p
+          p.id === id ? { 
+            ...p, 
+            status: 'success', 
+            lastRun: new Date().toISOString(),
+            // Si el backend devuelve la cantidad procesada, úsala; si no, deja un valor por defecto
+            recordsProcessed: data.records_processed || prev.find(p => p.id === id)?.recordsProcessed || 0 
+          } : p
         ));
-        toast.success("¡Pipeline Finalizado!", { description: data.message, duration: 5000 });
+
+        toast.success("¡Pipeline Finalizado!", {
+          description: data.message || "Datos migrados correctamente.",
+          duration: 5000,
+        });
       } else {
-        throw new Error(data.message);
+        // Si el servidor devuelve error (ej. 500), lanzamos excepción
+        throw new Error(data.message || `Error del servidor: ${response.status}`);
       }
     } catch (error) {
       console.error("Error:", error);

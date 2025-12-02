@@ -95,45 +95,52 @@ def init_tables():
         conn.commit()
 
     # ---------------------------------------------------------
-    # 4. PREPARAR QA (ESQUEMA VACÍO)
+    # 4. PREPARAR QA (CON INTEGRIDAD REFERENCIAL)
     # ---------------------------------------------------------
     print(f" Conectando a QA...")
     with engine_qa.connect() as conn:
+        # El orden del DROP es importante: Detalle -> Ordenes -> Clientes
         conn.execute(text("DROP TABLE IF EXISTS detalle_ordenes, ordenes, clientes, auditoria CASCADE"))
+        
         conn.execute(text("""
             CREATE TABLE clientes (
-                id INTEGER PRIMARY KEY,
+                id INTEGER PRIMARY KEY, -- Mismo ID que prod
                 nombre VARCHAR(100),
                 email VARCHAR(200),
                 telefono VARCHAR(50),
                 direccion VARCHAR(200),
                 fecha_registro TIMESTAMP
             );
+            
             CREATE TABLE ordenes (
                 id INTEGER PRIMARY KEY,
-                cliente_id INTEGER,
+                -- AQUÍ AGREGAMOS LA LLAVE FORÁNEA PARA CUMPLIR EL PUNTO 3
+                cliente_id INTEGER REFERENCES clientes(id), 
                 total DECIMAL(10, 2),
                 fecha TIMESTAMP
             );
+            
             CREATE TABLE detalle_ordenes (
                 id INTEGER PRIMARY KEY,
-                orden_id INTEGER,
+                -- AQUÍ AGREGAMOS LA LLAVE FORÁNEA
+                orden_id INTEGER REFERENCES ordenes(id),
                 producto VARCHAR(100),
                 cantidad INTEGER,
                 precio_unitario DECIMAL(10, 2)
             );
+            
             CREATE TABLE auditoria (
                 id SERIAL PRIMARY KEY,
                 fecha_ejecucion TIMESTAMP,
                 tabla VARCHAR(50),
                 registros_procesados INTEGER,
-                estado VARCHAR(20),
+                estado VARCHAR(50),
                 mensaje TEXT
             );
         """))
         conn.commit()
     
-    print(" ¡Base de datos inicializada con éxito (3 tablas)!")
+    print(" ¡Esquema QA regenerado con FKs estrictas!")
 
 if __name__ == "__main__":
     init_tables()
