@@ -51,7 +51,6 @@ class ETLEngine:
                 conn.commit()
         except Exception as e: logger.error(f" Fallo audit: {e}")
 
-    # --- FUNCIÓN CLAVE PARA INCREMENTAL ---
     def get_max_date(self, table, col):
         try:
             with self.engine_qa.connect() as conn:
@@ -66,31 +65,36 @@ class ETLEngine:
             pk = table_conf['pk']
             filter_col = table_conf.get('filter_column')
             
+            logger.info(f" Analizando tabla: {table}")
+            
             try:
                 # 1. DETECTAR DELTA
                 last_date = self.get_max_date(table, filter_col)
                 query = f"SELECT * FROM {table}"
                 
                 if last_date and filter_col:
-                    logger.info(f" {table}: Última carga {last_date}. Buscando nuevos...")
+                    logger.info(f"    Última carga: {last_date}. Buscando nuevos...")
                     query += f" WHERE {filter_col} > '{last_date}'"
                 else:
-                    logger.info(f" {table}: Carga Completa (Sin historial).")
+                    logger.info(f"    Carga Completa (Sin historial).")
 
                 # 2. EXTRACCIÓN
                 df = pd.read_sql(query, self.engine_prod)
+                
                 if df.empty:
-                    logger.info(f" {table}: Sin novedades.")
+                    logger.info(f"    Sin novedades.")
                     continue
 
+                logger.info(f"    Procesando {len(df)} registros nuevos...")
+
                 # 3. ENMASCARAMIENTO
-                for col, rule in table_conf.get('masking_rules', {}).items():
+                rules = table_conf.get('masking_rules', {})
+                for col, rule in rules.items():
                     if col in df.columns:
                         df[col] = df[col].apply(lambda x: self.mask_value(x, rule))
 
                 # 4. CARGA (UPSERT SIMULADO)
                 with self.engine_qa.connect() as conn:
-                    # Borramos los IDs que vamos a insertar para evitar duplicados
                     if not df.empty:
                         ids = tuple(df[pk].tolist())
                         if ids:

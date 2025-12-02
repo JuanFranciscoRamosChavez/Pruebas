@@ -134,7 +134,7 @@ def init_tables():
                 fecha_ejecucion TIMESTAMP,
                 tabla VARCHAR(50),
                 registros_procesados INTEGER,
-                estado VARCHAR(50),
+                estado VARCHAR(100),
                 mensaje TEXT
             );
         """))

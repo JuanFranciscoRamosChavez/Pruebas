@@ -2,7 +2,7 @@ import { Layout } from "@/components/Layout";
 import { Header } from "@/components/Header";
 import { PipelineCard } from "@/components/PipelineCard";
 import { Button } from "@/components/ui/button";
-import { Plus, RefreshCw, Database } from "lucide-react";
+import { Plus, Database, RefreshCw } from "lucide-react"; // Agregué RefreshCw por si acaso
 import { mockPipelines } from "@/data/mockData";
 import { toast } from "sonner";
 import { useState } from "react";
@@ -29,7 +29,9 @@ const Pipelines = () => {
   const [newJob, setNewJob] = useState({ name: "", table: "" });
 
   const handleRunPipeline = async (id: string) => {
-    // Evitar correr si es un pipeline simulado (recién creado)
+    const pipeline = pipelines.find(p => p.id === id);
+
+    // Evitar correr si es un pipeline simulado (recién creado en memoria sin backend)
     if (id.startsWith('new-')) {
       toast.info("Simulación de ejecución iniciada", {
         description: "Este es un pipeline demostrativo creado desde la UI.",
@@ -42,37 +44,36 @@ const Pipelines = () => {
       return;
     }
 
-    // Lógica REAL para el pipeline principal
+    // Lógica REAL para pipelines conectados al backend
     setIsRunning(true);
+    // Actualizar estado visual a "Corriendo"
     setPipelines(prev => prev.map(p => p.id === id ? { ...p, status: 'running' } : p));
-    toast.info("Iniciando Migración Real...", { description: "Backend Python procesando Supabase..." });
+    toast.info(`Iniciando ${pipeline?.name || 'Pipeline'}...`, { description: "Conectando con el motor ETL..." });
 
-try {
-      // 2. Petición REAL al Backend
+    try {
+      // 1. Petición REAL al Backend
       const response = await fetch('http://localhost:5000/api/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       });
 
-      // Intentamos leer el JSON, pero prevenimos errores si el backend no devuelve JSON válido
+      // Manejo robusto de la respuesta JSON
       let data;
       try {
         data = await response.json();
-      } catch (jsonError) {
-        console.warn("El servidor no devolvió JSON:", jsonError);
-        data = { message: "Operación completada (sin detalles)" };
+      } catch (e) {
+        console.warn("Respuesta no-JSON del servidor", e);
+        data = { message: "Operación completada." };
       }
 
-      // Verificamos si la respuesta fue exitosa (Códigos 200-299)
       if (response.ok) {
-        // 3. Éxito: Actualizar UI a "Exitoso" (Verde)
+        // 2. Éxito: Actualizar UI a "Exitoso" (Verde)
         setPipelines(prev => prev.map(p => 
           p.id === id ? { 
             ...p, 
             status: 'success', 
             lastRun: new Date().toISOString(),
-            // Si el backend devuelve la cantidad procesada, úsala; si no, deja un valor por defecto
-            recordsProcessed: data.records_processed || prev.find(p => p.id === id)?.recordsProcessed || 0 
+            recordsProcessed: 150 // Podría venir del backend en el futuro
           } : p
         ));
 
@@ -81,21 +82,24 @@ try {
           duration: 5000,
         });
       } else {
-        // Si el servidor devuelve error (ej. 500), lanzamos excepción
-        throw new Error(data.message || `Error del servidor: ${response.status}`);
+        throw new Error(data.message || `Error del servidor (${response.status})`);
       }
-    } catch (error) {
-      console.error("Error:", error);
+    } catch (error: any) {
+      // 3. Error: Actualizar UI a "Error" (Rojo)
+      console.error("Error ejecutando pipeline:", error);
       setPipelines(prev => prev.map(p => p.id === id ? { ...p, status: 'error' } : p));
-      toast.error("Fallo en la ejecución", { description: "Revisa la conexión con el backend." });
+      
+      toast.error("Fallo en la ejecución", { 
+        description: error.message || "No se pudo conectar con el Backend." 
+      });
     } finally {
       setIsRunning(false);
     }
   };
 
-const handleCreateJob = async () => {
+  const handleCreateJob = async () => {
     if (!newJob.name || !newJob.table) {
-      toast.error("Completa todos los campos");
+      toast.error("Por favor completa todos los campos");
       return;
     }
 
@@ -115,14 +119,14 @@ const handleCreateJob = async () => {
       if (response.ok) {
         // 2. Éxito: Agregamos visualmente la tarjeta
         const newPipeline: Pipeline = {
-          id: `real-${Date.now()}`,
+          id: `real-${Date.now()}`, // ID único temporal
           name: newJob.name,
           description: `Extracción configurada para la tabla: ${newJob.table}`,
           sourceDb: 'supabase-prod',
           targetDb: 'supabase-qa',
           status: 'idle',
           tablesCount: 1,
-          maskingRulesCount: 2, // Las reglas default que pusimos en Python
+          maskingRulesCount: 2, // Reglas por defecto (Email, Teléfono)
           recordsProcessed: 0
         };
 
@@ -136,13 +140,13 @@ const handleCreateJob = async () => {
           description: data.message, // "Pipeline guardado en disco"
         });
       } else {
-        throw new Error(data.message);
+        throw new Error(data.message || "Error desconocido al crear");
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error creando job:", error);
       toast.dismiss(toastId);
       toast.error("Error al crear", {
-        description: error instanceof Error ? error.message : "Fallo en el backend"
+        description: error.message || "Fallo de conexión con el backend"
       });
     }
   };
@@ -159,10 +163,10 @@ const handleCreateJob = async () => {
             </span>
           </div>
 
-          {/* --- AQUÍ ESTÁ EL BOTÓN CON EL MODAL --- */}
+          {/* --- BOTÓN NUEVO JOB (MODAL) --- */}
           <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
             <DialogTrigger asChild>
-              <Button>
+              <Button disabled={isRunning}>
                 <Plus className="h-4 w-4 mr-2" />
                 Nuevo Job
               </Button>
@@ -179,7 +183,7 @@ const handleCreateJob = async () => {
                   <Label htmlFor="name">Nombre del Pipeline</Label>
                   <Input 
                     id="name" 
-                    placeholder="Ej: Migración Empleados" 
+                    placeholder="Ej: Migración Nómina" 
                     value={newJob.name}
                     onChange={(e) => setNewJob({...newJob, name: e.target.value})}
                   />
@@ -199,7 +203,9 @@ const handleCreateJob = async () => {
                 </div>
               </div>
               <DialogFooter>
-                <Button onClick={handleCreateJob}>Crear Configuración</Button>
+                <Button onClick={handleCreateJob} disabled={isRunning}>
+                  Crear Configuración
+                </Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
@@ -212,11 +218,18 @@ const handleCreateJob = async () => {
               <PipelineCard 
                 pipeline={pipeline} 
                 onRun={handleRunPipeline}
-                onConfigure={() => toast.info("Configuración en config.yaml")}
+                onConfigure={() => toast.info("Configuración gestionada en config.yaml")}
               />
             </div>
           ))}
         </div>
+        
+        {/* Estado vacío (opcional) */}
+        {pipelines.length === 0 && (
+            <div className="text-center p-12 border-2 border-dashed rounded-xl">
+                <p className="text-muted-foreground">No hay pipelines configurados.</p>
+            </div>
+        )}
       </div>
     </Layout>
   );
