@@ -20,6 +20,9 @@
     "noUnusedParameters": false,
     "noImplicitAny": false,
     "noFallthroughCasesInSwitch": false,
+    
+    /* --- ESTA ES LA LÍNEA QUE ARREGLA EL ERROR --- */
+    "types": ["vite/client"],
 
     "baseUrl": ".",
     "paths": {

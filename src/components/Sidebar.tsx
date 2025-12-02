@@ -7,8 +7,11 @@ import {
   History, 
   Database, 
   Settings,
-  Terminal
+  Terminal,
+  LogOut 
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 
 const navItems = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard" },
@@ -20,9 +23,16 @@ const navItems = [
 ];
 
 export function Sidebar() {
+  
+  const handleLogout = () => {
+    toast.info("Cerrando sesión...");
+    localStorage.removeItem("userRole");
+    // Recargar para volver al Login
+    setTimeout(() => window.location.href = "/", 500);
+  };
+
   return (
     <aside className="w-64 min-h-screen bg-sidebar border-r border-sidebar-border flex flex-col">
-      {/* Logo */}
       <div className="p-6 border-b border-sidebar-border">
         <div className="flex items-center gap-3">
           <div className="p-2 rounded-lg bg-primary/20">
@@ -35,7 +45,6 @@ export function Sidebar() {
         </div>
       </div>
 
-      {/* Navigation */}
       <nav className="flex-1 p-4 space-y-1">
         {navItems.map((item) => (
           <NavLink
@@ -54,15 +63,15 @@ export function Sidebar() {
         ))}
       </nav>
 
-      {/* Footer */}
-      <div className="p-4 border-t border-sidebar-border">
-        <div className="p-3 rounded-lg bg-sidebar-accent/50">
-          <p className="text-xs text-muted-foreground mb-1">Estado del Sistema</p>
-          <div className="flex items-center gap-2">
-            <span className="h-2 w-2 rounded-full bg-success animate-pulse" />
-            <span className="text-sm text-sidebar-foreground">Operativo</span>
-          </div>
-        </div>
+      <div className="p-4 border-t border-sidebar-border space-y-4">
+        <Button 
+          variant="destructive" 
+          className="w-full justify-start pl-4 bg-red-900/20 hover:bg-red-900/40 text-red-400 border border-red-900/50"
+          onClick={handleLogout}
+        >
+          <LogOut className="h-4 w-4 mr-2" />
+          Cerrar Sesión
+        </Button>
       </div>
     </aside>
   );
