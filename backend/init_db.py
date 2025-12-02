@@ -14,23 +14,18 @@ with open(os.path.join(BASE_DIR, 'config.yaml'), 'r') as f:
 fake = Faker('es_MX')
 
 def init_tables():
-    # Obtener conexiones de las variables de entorno
-    prod_uri = os.getenv(config['databases']['source_db_env_var'])
-    qa_uri = os.getenv(config['databases']['target_db_env_var'])
-    
-    if not prod_uri or not qa_uri:
-        print(" Error: Faltan las URIs en el archivo .env")
-        return
-
+    # ... (conexión igual que antes) ...
     engine_prod = create_engine(prod_uri)
     engine_qa = create_engine(qa_uri)
     
     # ---------------------------------------------------------
-    # 1. PREPARAR SERVIDOR DE PRODUCCIÓN
+    # 1. PREPARAR PRODUCCIÓN (3 TABLAS)
     # ---------------------------------------------------------
     print(f" Conectando a Producción...")
     with engine_prod.connect() as conn:
-        conn.execute(text("DROP TABLE IF EXISTS ordenes, clientes CASCADE"))
+        # Borramos en cascada para limpiar todo
+        conn.execute(text("DROP TABLE IF EXISTS detalle_ordenes, ordenes, clientes CASCADE"))
+        
         conn.execute(text("""
             CREATE TABLE clientes (
                 id SERIAL PRIMARY KEY,
@@ -46,39 +41,57 @@ def init_tables():
                 total DECIMAL(10, 2),
                 fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
+            -- 3ra Tabla Relacionada (Requisito PDF)
+            CREATE TABLE detalle_ordenes (
+                id SERIAL PRIMARY KEY,
+                orden_id INTEGER REFERENCES ordenes(id),
+                producto VARCHAR(100),
+                cantidad INTEGER,
+                precio_unitario DECIMAL(10, 2)
+            );
         """))
         
-        print(" Sembrando datos falsos en Producción...")
-        # Crear 50 clientes
+        print(" Sembrando datos en Producción (Nivel 1: Clientes)...")
         for _ in range(50): 
             conn.execute(text(
                 "INSERT INTO clientes (nombre, email, telefono, direccion) VALUES (:n, :e, :t, :d)"
             ), {
                 "n": fake.name(), 
                 "e": fake.email(), 
-                # Formato fijo para probar regla "preserve_format"
                 "t": f"+52 ({random.randint(55,99)}) {random.randint(1000,9999)}-{random.randint(1000,9999)}", 
                 "d": fake.address()
             })
         
-        # Crear órdenes asociadas
+        print("🌱 Sembrando datos en Producción (Nivel 2: Órdenes)...")
         for _ in range(100): 
             conn.execute(text("INSERT INTO ordenes (cliente_id, total) VALUES (:c, :t)"), 
                          {"c": random.randint(1, 50), "t": random.uniform(100, 5000)})
+                         
+        print("🌱 Sembrando datos en Producción (Nivel 3: Detalles)...")
+        for _ in range(200): # 2 detalles por orden aprox
+            conn.execute(text("""
+                INSERT INTO detalle_ordenes (orden_id, producto, cantidad, precio_unitario) 
+                VALUES (:o, :p, :c, :pu)
+            """), {
+                "o": random.randint(1, 100),
+                "p": fake.word().capitalize() + " " + fake.word(), # Nombre producto random
+                "c": random.randint(1, 10),
+                "pu": random.uniform(10, 500)
+            })
+        
         conn.commit()
 
     # ---------------------------------------------------------
-    # 2. PREPARAR SERVIDOR DE QA
+    # 2. PREPARAR QA (ESQUEMA VACÍO)
     # ---------------------------------------------------------
     print(f" Conectando a QA...")
     with engine_qa.connect() as conn:
-        conn.execute(text("DROP TABLE IF EXISTS ordenes, clientes, auditoria CASCADE"))
+        conn.execute(text("DROP TABLE IF EXISTS detalle_ordenes, ordenes, clientes, auditoria CASCADE"))
         conn.execute(text("""
-            -- Tablas destino (Sin AUTO_INCREMENT en ID para mantener integridad con Prod)
             CREATE TABLE clientes (
-                id INTEGER PRIMARY KEY, 
+                id INTEGER PRIMARY KEY,
                 nombre VARCHAR(100),
-                email VARCHAR(200), -- Hash es largo
+                email VARCHAR(200), -- Hash
                 telefono VARCHAR(50),
                 direccion VARCHAR(200),
                 fecha_registro TIMESTAMP
@@ -89,7 +102,13 @@ def init_tables():
                 total DECIMAL(10, 2),
                 fecha TIMESTAMP
             );
-            -- Tabla de Auditoría (Requerimiento 5)
+            CREATE TABLE detalle_ordenes (
+                id INTEGER PRIMARY KEY,
+                orden_id INTEGER,
+                producto VARCHAR(100), -- Aquí aplicaremos máscara
+                cantidad INTEGER,
+                precio_unitario DECIMAL(10, 2)
+            );
             CREATE TABLE auditoria (
                 id SERIAL PRIMARY KEY,
                 fecha_ejecucion TIMESTAMP,
@@ -100,6 +119,8 @@ def init_tables():
             );
         """))
         conn.commit()
+    
+    print(" ¡Base de datos regenerada con 3 tablas relacionadas!")
     
     print(" ¡Entornos listos! Datos en Producción y Tablas vacías en QA.")
 

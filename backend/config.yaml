@@ -22,3 +22,9 @@ tables:
     filter_column: "fecha"        
     masking_rules:
       total: "none"
+
+  - name: "detalle_ordenes"
+    pk: "id"
+    masking_rules:
+      producto: "redact"     
+      precio_unitario: "none"
