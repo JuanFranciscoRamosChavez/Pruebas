@@ -1,7 +1,7 @@
 settings:
   app_name: "DataMask ETL"
   batch_size: 500
-  extraction_window_days: 90  
+  extraction_window_days: 90 
 
 databases:
   source_db_env_var: "SUPABASE_PROD_URI"
