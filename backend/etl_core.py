@@ -2,6 +2,8 @@ import os
 import yaml
 import hashlib
 import logging
+import uuid
+import json
 import pandas as pd
 from datetime import datetime
 from sqlalchemy import create_engine, text
@@ -11,7 +13,8 @@ from dotenv import load_dotenv
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(os.path.join(BASE_DIR, '.env'))
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
+# Logs estructurados en consola también
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 class ETLEngine:
@@ -22,6 +25,9 @@ class ETLEngine:
         
         self.faker = Faker('es_MX')
         self.salt = os.getenv("HASH_SALT", "default_salt").encode()
+        
+        # ID Único de Ejecución (Para rastrear todo este lote de trabajo)
+        self.execution_id = str(uuid.uuid4())
         
         try:
             prod_uri = os.getenv(self.config['databases']['source_db_env_var'])
@@ -41,15 +47,29 @@ class ETLEngine:
         elif rule == 'redact': return "****"
         return value
 
-    def log_audit(self, table, records, status, error=None):
+    def log_audit(self, data):
+        """Escribe el log detallado en QA (Req 5)"""
         try:
             with self.engine_qa.connect() as conn:
                 conn.execute(text("""
-                    INSERT INTO auditoria (tabla, registros_procesados, estado, mensaje, fecha_ejecucion)
-                    VALUES (:t, :r, :s, :m, :f)
-                """), {"t": table, "r": records, "s": status, "m": str(error)[:200] if error else "OK", "f": datetime.now()})
+                    INSERT INTO auditoria (
+                        id_ejecucion, tabla, operacion, registros_procesados, 
+                        reglas_aplicadas, fecha_inicio, fecha_fin, estado, mensaje
+                    ) VALUES (:eid, :tb, :op, :rec, :rules, :start, :end, :st, :msg)
+                """), {
+                    "eid": self.execution_id,
+                    "tb": data['tabla'],
+                    "op": data['operacion'],
+                    "rec": data['registros'],
+                    "rules": json.dumps(data['reglas']), # Guardamos reglas como JSON string
+                    "start": data['inicio'],
+                    "end": datetime.now(),
+                    "st": data['estado'],
+                    "msg": str(data.get('error', 'OK'))[:200]
+                })
                 conn.commit()
-        except Exception as e: logger.error(f" Fallo audit: {e}")
+        except Exception as e:
+            logger.error(f" Fallo escribiendo auditoría: {e}")
 
     def get_max_date(self, table, col):
         try:
@@ -58,26 +78,29 @@ class ETLEngine:
         except Exception: return None
 
     def run_pipeline(self):
-        logger.info(" Iniciando Pipeline Inteligente (Delta)...")
+        logger.info(f" Iniciando Pipeline (ID: {self.execution_id})")
         
         for table_conf in self.config['tables']:
             table = table_conf['name']
             pk = table_conf['pk']
             filter_col = table_conf.get('filter_column')
+            rules = table_conf.get('masking_rules', {})
             
-            logger.info(f" Analizando tabla: {table}")
+            # Capturar hora de inicio por tabla
+            start_time = datetime.now()
+            
+            logger.info(f" Analizando: {table}")
             
             try:
                 # 1. DETECTAR DELTA
                 last_date = self.get_max_date(table, filter_col)
                 query = f"SELECT * FROM {table}"
+                operacion = "FULL"
                 
                 if last_date and filter_col:
-                    logger.info(f"    Última carga: {last_date}. Buscando nuevos...")
                     query += f" WHERE {filter_col} > '{last_date}'"
-                else:
-                    logger.info(f"    Carga Completa (Sin historial).")
-
+                    operacion = "INCREMENTAL"
+                
                 # 2. EXTRACCIÓN
                 df = pd.read_sql(query, self.engine_prod)
                 
@@ -85,15 +108,12 @@ class ETLEngine:
                     logger.info(f"    Sin novedades.")
                     continue
 
-                logger.info(f"    Procesando {len(df)} registros nuevos...")
-
                 # 3. ENMASCARAMIENTO
-                rules = table_conf.get('masking_rules', {})
                 for col, rule in rules.items():
                     if col in df.columns:
                         df[col] = df[col].apply(lambda x: self.mask_value(x, rule))
 
-                # 4. CARGA (UPSERT SIMULADO)
+                # 4. CARGA (UPSERT)
                 with self.engine_qa.connect() as conn:
                     if not df.empty:
                         ids = tuple(df[pk].tolist())
@@ -103,12 +123,29 @@ class ETLEngine:
                             conn.commit()
                 
                 df.to_sql(table, self.engine_qa, if_exists='append', index=False, method='multi')
-                self.log_audit(table, len(df), "SUCCESS - INCREMENTAL")
-                logger.info(f" {table}: {len(df)} nuevos registros sincronizados.")
+                
+                # 5. AUDITORÍA COMPLETA
+                self.log_audit({
+                    "tabla": table,
+                    "operacion": operacion,
+                    "registros": len(df),
+                    "reglas": rules,
+                    "inicio": start_time,
+                    "estado": "SUCCESS"
+                })
+                logger.info(f" {table}: {len(df)} registros ({operacion}).")
 
             except Exception as e:
                 logger.error(f" Error {table}: {e}")
-                self.log_audit(table, 0, "ERROR", str(e))
+                self.log_audit({
+                    "tabla": table,
+                    "operacion": "ERROR",
+                    "registros": 0,
+                    "reglas": rules,
+                    "inicio": start_time,
+                    "estado": "ERROR",
+                    "error": str(e)
+                })
 
 if __name__ == "__main__":
     ETLEngine().run_pipeline()

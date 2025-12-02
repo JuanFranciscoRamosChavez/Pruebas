@@ -34,19 +34,17 @@ def run_etl():
 
 @app.route('/api/history', methods=['GET'])
 def get_history():
-    """Consulta la tabla de auditoría real en QA"""
     try:
         etl = ETLEngine()
-        # Conectamos a QA para leer logs
         with etl.engine_qa.connect() as conn:
+            # Consultamos los campos nuevos
             result = conn.execute(text("""
-                SELECT fecha_ejecucion, tabla, registros_procesados, estado, mensaje 
+                SELECT fecha_fin, tabla, registros_procesados, estado, mensaje, operacion, id_ejecucion 
                 FROM auditoria 
-                ORDER BY fecha_ejecucion DESC 
+                ORDER BY fecha_fin DESC 
                 LIMIT 50
             """))
             
-            # Convertir a lista de diccionarios para JSON
             logs = []
             for row in result:
                 logs.append({
@@ -54,13 +52,13 @@ def get_history():
                     "tabla": row[1],
                     "registros": row[2],
                     "estado": row[3],
-                    "mensaje": row[4]
+                    "mensaje": f"[{row[5]}] {row[4]} (ID: {row[6]})" # Combinamos info extra en el mensaje
                 })
                 
         return jsonify(logs), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
+        
 @app.route('/health', methods=['GET'])
 def health():
     return jsonify({"status": "online", "system": "DataMask ETL"}), 200

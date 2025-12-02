@@ -131,9 +131,13 @@ def init_tables():
             
             CREATE TABLE auditoria (
                 id SERIAL PRIMARY KEY,
-                fecha_ejecucion TIMESTAMP,
+                id_ejecucion VARCHAR(50),     
                 tabla VARCHAR(50),
+                operacion VARCHAR(20),         
                 registros_procesados INTEGER,
+                reglas_aplicadas TEXT,         
+                fecha_inicio TIMESTAMP,        
+                fecha_fin TIMESTAMP,           
                 estado VARCHAR(100),
                 mensaje TEXT
             );

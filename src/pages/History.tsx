@@ -22,23 +22,30 @@ const History = () => {
       const data = await response.json();
       
       // Transformar datos del backend al formato del frontend
-      const realLogs: ExecutionLog[] = data.map((item: any, index: number) => ({
-        id: `real-${index}`,
-        pipelineId: '1', // Hardcodeado por simplicidad
-        pipelineName: `Migración: ${item.tabla}`,
-        status: item.estado === 'SUCCESS' ? 'success' : 'error',
-        startTime: item.fecha,
-        duration: 0, // El backend simple no calculó duración, lo dejamos en 0
-        recordsExtracted: item.registros,
-        recordsMasked: item.registros,
-        recordsLoaded: item.registros,
-        errors: item.estado === 'ERROR' ? [{ 
-          id: `err-${index}`, 
-          message: item.mensaje, 
-          timestamp: item.fecha, 
-          severity: 'error' 
-        }] : []
-      }));
+      const realLogs: ExecutionLog[] = data.map((item: any, index: number) => {
+        // --- LÓGICA CORREGIDA AQUÍ ---
+        // Si el estado contiene "SUCCESS" (ej: "SUCCESS - INCREMENTAL"), es éxito.
+        const isSuccess = item.estado && item.estado.includes('SUCCESS');
+        
+        return {
+          id: `real-${index}`,
+          pipelineId: '1',
+          pipelineName: `Migración: ${item.tabla}`,
+          status: isSuccess ? 'success' : 'error',
+          startTime: item.fecha,
+          duration: 0,
+          recordsExtracted: item.registros,
+          recordsMasked: item.registros,
+          recordsLoaded: item.registros,
+          // Solo mostramos errores si NO fue exitoso
+          errors: !isSuccess ? [{ 
+            id: `err-${index}`, 
+            message: item.mensaje, 
+            timestamp: item.fecha, 
+            severity: 'error' 
+          }] : []
+        };
+      });
 
       setLogs(realLogs);
       toast.success("Historial actualizado desde BD");
