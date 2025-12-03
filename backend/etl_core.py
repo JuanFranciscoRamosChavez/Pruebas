@@ -120,12 +120,21 @@ class ETLEngine:
                             conn.execute(text(f"DELETE FROM {table} WHERE {pk} IN {id_str}"))
                             conn.commit()
                 
-                # Insertar en lotes (PUNTO 9)
-                df.to_sql(table, self.engine_qa, if_exists='append', index=False, method='multi', chunksize=500)
+                tamanio_lote = self.config['settings'].get('batch_size', 1000)  
+
+                # Insertar en lotes DINÁMICOS (PUNTO 9)
+                df.to_sql(
+                    table, 
+                    self.engine_qa, 
+                    if_exists='append', 
+                    index=False, 
+                    method='multi', 
+                    chunksize=tamanio_lote  
+                )
                 
-                # Log final y SALIDA del bucle
+                # Log final
                 self.log_audit(table, len(df), f"SUCCESS - {mode}")
-                logger.info(f" {table}: Sincronización completada.")
+                logger.info(f" {table}: Sincronización completada (Lotes de {tamanio_lote}).")
                 return 
 
             except Exception as e:

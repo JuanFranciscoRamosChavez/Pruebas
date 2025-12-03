@@ -63,7 +63,7 @@ def init_tables():
                 "INSERT INTO clientes (nombre, email, telefono, direccion) VALUES (:n, :e, :t, :d)"
             ), {"n": fake.name(), "e": fake.email(), "t": f"+52 ({random.randint(55,99)}) {random.randint(1000,9999)}-{random.randint(1000,9999)}", "d": fake.address()})
         # Órdenes
-        for _ in range(100): 
+        for _ in range(2000): 
             conn.execute(text("INSERT INTO ordenes (cliente_id, total) VALUES (:c, :t)"), {"c": random.randint(1, 50), "t": random.uniform(100, 5000)})
         # Detalles
         for _ in range(200):

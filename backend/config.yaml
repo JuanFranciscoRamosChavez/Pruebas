@@ -1,6 +1,6 @@
 settings:
   app_name: "DataMask ETL"
-  batch_size: 500
+  batch_size: 1000
   extraction_window_days: 90 
 
 databases:
