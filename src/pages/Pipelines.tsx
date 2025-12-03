@@ -3,9 +3,8 @@ import { Header } from "@/components/Header";
 import { PipelineCard } from "@/components/PipelineCard";
 import { Button } from "@/components/ui/button";
 import { Plus, Database, Lock, RefreshCw } from "lucide-react";
-import { mockPipelines } from "@/data/mockData";
 import { toast } from "sonner";
-import { useState } from "react";
+import { useState, useEffect } from "react"; // Agregamos useEffect
 import { Pipeline } from "@/types/pipeline";
 import {
   Dialog,
@@ -25,97 +24,73 @@ interface PipelinesProps {
 }
 
 const Pipelines = ({ userRole }: PipelinesProps) => {
-  const [pipelines, setPipelines] = useState<Pipeline[]>(mockPipelines);
+  const [pipelines, setPipelines] = useState<Pipeline[]>([]); // Inicializamos vacío
+  const [loading, setLoading] = useState(true);
   const [isRunning, setIsRunning] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newJob, setNewJob] = useState({ name: "", table: "" });
-  
-  // --- NUEVO ESTADO: Tablas detectadas automáticamente ---
   const [availableTables, setAvailableTables] = useState<string[]>([]);
-  const [isLoadingTables, setIsLoadingTables] = useState(false);
 
-  // --- FUNCIÓN INTELIGENTE: Cargar tablas reales desde el Backend ---
-  const loadTables = async () => {
-    setIsLoadingTables(true);
+  // --- 1. CARGAR PIPELINES REALES AL INICIAR ---
+  const fetchPipelines = async () => {
+    setLoading(true);
     try {
-      const res = await fetch('http://localhost:5000/api/source/tables');
+      const res = await fetch('http://localhost:5000/api/pipelines');
       if (!res.ok) throw new Error("Error de conexión");
-      const tables = await res.json();
-      
-      if (Array.isArray(tables)) {
-        setAvailableTables(tables);
-        toast.success(`Se detectaron ${tables.length} tablas en Producción`);
-      }
+      const data = await res.json();
+      setPipelines(data);
     } catch (e) {
       console.error(e);
-      toast.error("No se pudieron cargar las tablas de Producción");
-      // Fallback visual para pruebas si falla el backend
-      setAvailableTables(["clientes", "ordenes", "detalle_ordenes", "inventario", "proveedores"]); 
+      toast.error("No se pudieron cargar los pipelines");
     } finally {
-      setIsLoadingTables(false);
+      setLoading(false);
     }
   };
 
+  useEffect(() => {
+    fetchPipelines();
+  }, []); // Se ejecuta al montar el componente
+  // ---------------------------------------------
+
+  const loadTables = async () => {
+    try {
+      const res = await fetch('http://localhost:5000/api/source/tables');
+      const tables = await res.json();
+      if (Array.isArray(tables)) setAvailableTables(tables);
+    } catch (e) { toast.error("Error buscando tablas"); }
+  };
+
   const handleRunPipeline = async (id: string) => {
-    const pipeline = pipelines.find(p => p.id === id);
-
-    if (id.startsWith('new-') || id.startsWith('real-')) {
-        toast.info("Simulación iniciada");
-        setPipelines(prev => prev.map(p => p.id === id ? { ...p, status: 'running' } : p));
-        setTimeout(() => {
-            setPipelines(prev => prev.map(p => p.id === id ? { ...p, status: 'success', lastRun: new Date().toISOString() } : p));
-            toast.success("Ejecución simulada exitosa");
-        }, 2000);
-        return;
-    }
-
     setIsRunning(true);
+    // Optimistic Update (Visual)
     setPipelines(prev => prev.map(p => p.id === id ? { ...p, status: 'running' } : p));
-    const toastId = toast.loading(`Ejecutando ${pipeline?.name}...`);
+    toast.info("Iniciando ejecución...");
 
     try {
       const response = await fetch('http://localhost:5000/api/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       });
-
-      let data = { message: "Proceso finalizado." };
-      try {
-        const json = await response.json();
-        if (json) data = json;
-      } catch (e) { console.warn("No JSON", e); }
+      const data = await response.json();
 
       if (response.ok) {
-        setPipelines(prev => prev.map(p => 
-          p.id === id ? { ...p, status: 'success', lastRun: new Date().toISOString(), recordsProcessed: 150 } : p
-        ));
-        toast.dismiss(toastId);
         toast.success("¡Éxito!", { description: data.message });
+        // Recargar la lista real para ver fecha y estado actualizado de la BD
+        await fetchPipelines(); 
       } else {
-        throw new Error(data.message || `Error ${response.status}`);
+        throw new Error(data.message);
       }
     } catch (error: any) {
-      console.error("Error:", error);
       setPipelines(prev => prev.map(p => p.id === id ? { ...p, status: 'error' } : p));
-      toast.dismiss(toastId);
-      toast.error("Error", { description: error.message || "Fallo de conexión" });
+      toast.error("Error", { description: error.message });
     } finally {
       setIsRunning(false);
     }
   };
 
   const handleCreateJob = async () => {
-    if (userRole !== 'admin') {
-      toast.error("Acceso Denegado", { description: "Solo los desarrolladores pueden crear pipelines." });
-      return;
-    }
-
-    if (!newJob.name || !newJob.table) {
-      toast.error("Faltan datos");
-      return;
-    }
-
-    const toastId = toast.loading("Analizando estructura y creando pipeline...");
+    if (!newJob.name || !newJob.table) return toast.error("Faltan datos");
+    const toastId = toast.loading("Guardando...");
 
     try {
       const response = await fetch('http://localhost:5000/api/pipelines', {
@@ -123,49 +98,20 @@ const Pipelines = ({ userRole }: PipelinesProps) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newJob)
       });
-      
-      const data = await response.json();
 
       if (response.ok) {
-        const newPipeline: Pipeline = {
-          id: `real-${Date.now()}`,
-          name: newJob.name,
-          description: `Tabla: ${newJob.table}`,
-          sourceDb: 'supabase-prod',
-          targetDb: 'supabase-qa',
-          status: 'idle',
-          tablesCount: 1,
-          maskingRulesCount: 2, // Esto se actualizaría real si el backend devuelve el conteo
-          recordsProcessed: 0
-        };
-
-        setPipelines([...pipelines, newPipeline]);
-        setNewJob({ name: "", table: "" });
-        setIsModalOpen(false);
-        
         toast.dismiss(toastId);
-        toast.success("Pipeline Configurado", { description: data.message });
+        toast.success("Pipeline Creado");
+        setIsModalOpen(false);
+        setNewJob({ name: "", table: "" });
+        // Recargar lista del servidor para que aparezca el nuevo
+        await fetchPipelines();
       } else {
-        throw new Error(data.message || "Error al guardar");
+        throw new Error("Error al guardar");
       }
     } catch (error: any) {
-        // Fallback
-        const simPipeline: Pipeline = {
-            id: `new-${Date.now()}`,
-            name: newJob.name,
-            description: `(Simulado) ${newJob.table}`,
-            sourceDb: 'supabase-prod',
-            targetDb: 'supabase-qa',
-            status: 'idle',
-            tablesCount: 1,
-            maskingRulesCount: 0,
-            recordsProcessed: 0
-        };
-        setPipelines([...pipelines, simPipeline]);
-        setNewJob({ name: "", table: "" });
-        setIsModalOpen(false);
-        toast.dismiss(toastId);
-        toast.success("Creado (Modo Simulación)", { description: "Backend no disponible" });
+      toast.dismiss(toastId);
+      toast.error("Error", { description: error.message });
     }
   };
 
@@ -179,92 +125,49 @@ const Pipelines = ({ userRole }: PipelinesProps) => {
             <span className="text-sm text-muted-foreground bg-muted px-3 py-1 rounded-full border border-border/50 flex items-center gap-2">
               <Database className="h-3 w-3" /> Ambiente: <strong>Supabase Cloud</strong>
             </span>
-            
-            <span className={`text-xs px-2 py-1 rounded font-bold border ${
-              userRole === 'admin' 
-                ? 'bg-purple-100 text-purple-700 border-purple-200' 
-                : 'bg-blue-100 text-blue-700 border-blue-200'
-            }`}>
+            <span className={`text-xs px-2 py-1 rounded font-bold border ${userRole === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
               {userRole === 'admin' ? 'DESARROLLADOR' : 'OPERADOR'}
             </span>
           </div>
 
-          {/* --- BOTÓN NUEVO JOB (SOLO ADMIN) --- */}
           {userRole === 'admin' ? (
-            <Dialog open={isModalOpen} onOpenChange={(open) => {
-                setIsModalOpen(open);
-                // AL ABRIR EL MODAL, CARGAMOS LAS TABLAS REALES
-                if (open) loadTables();
-            }}>
-                <DialogTrigger asChild>
-                <Button disabled={isRunning}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Nuevo Job
-                </Button>
-                </DialogTrigger>
+            <Dialog open={isModalOpen} onOpenChange={(open) => { setIsModalOpen(open); if (open) loadTables(); }}>
+                <DialogTrigger asChild><Button disabled={isRunning}><Plus className="h-4 w-4 mr-2" /> Nuevo Job</Button></DialogTrigger>
                 <DialogContent className="sm:max-w-[425px] bg-card border-border">
-                <DialogHeader>
-                    <DialogTitle>Auto-Discovery Pipeline</DialogTitle>
-                    <DialogDescription>El sistema detectará automáticamente la estructura de la tabla.</DialogDescription>
-                </DialogHeader>
+                <DialogHeader><DialogTitle>Nuevo Pipeline</DialogTitle><DialogDescription>El sistema detectará la estructura.</DialogDescription></DialogHeader>
                 <div className="grid gap-4 py-4">
-                    
-                    {/* SELECTOR DE TABLAS DINÁMICO */}
                     <div className="grid gap-2">
-                    <Label htmlFor="table">Tabla de Producción (Detectadas)</Label>
-                    <Select onValueChange={(val) => {
-                        setNewJob({ table: val, name: `Migración ${val.charAt(0).toUpperCase() + val.slice(1)}` });
-                    }}>
-                        <SelectTrigger>
-                            <SelectValue placeholder={isLoadingTables ? "Escaneando..." : "Seleccione una tabla..."} />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {availableTables.length === 0 ? (
-                                <SelectItem value="none" disabled>No se encontraron tablas nuevas</SelectItem>
-                            ) : (
-                                availableTables.map(table => (
-                                    <SelectItem key={table} value={table}>{table}</SelectItem>
-                                ))
-                            )}
-                        </SelectContent>
+                    <Label>Tabla Producción</Label>
+                    <Select onValueChange={(val) => setNewJob({ table: val, name: `Migración ${val.charAt(0).toUpperCase() + val.slice(1)}` })}>
+                        <SelectTrigger><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
+                        <SelectContent>{availableTables.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
                     </Select>
                     </div>
-
-                    <div className="grid gap-2">
-                    <Label htmlFor="name">Nombre del Job</Label>
-                    <Input 
-                        id="name" 
-                        value={newJob.name}
-                        onChange={(e) => setNewJob({...newJob, name: e.target.value})}
-                    />
-                    </div>
+                    <div className="grid gap-2"><Label>Nombre</Label><Input value={newJob.name} onChange={(e) => setNewJob({...newJob, name: e.target.value})}/></div>
                 </div>
-                <DialogFooter>
-                    <Button onClick={handleCreateJob} disabled={isRunning || isLoadingTables}>
-                        {isLoadingTables ? <RefreshCw className="animate-spin h-4 w-4" /> : "Auto-Configurar"}
-                    </Button>
-                </DialogFooter>
+                <DialogFooter><Button onClick={handleCreateJob}>Crear</Button></DialogFooter>
                 </DialogContent>
             </Dialog>
           ) : (
-            <Button disabled variant="secondary" className="opacity-70 cursor-not-allowed">
-                <Lock className="h-3 w-3 mr-2" />
-                Solo Lectura
-            </Button>
+            <Button disabled variant="secondary"><Lock className="h-3 w-3 mr-2" /> Solo Lectura</Button>
           )}
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {pipelines.map((pipeline) => (
-            <div key={pipeline.id} className="animate-fade-in">
-              <PipelineCard 
-                pipeline={pipeline} 
-                onRun={handleRunPipeline}
-                onConfigure={() => toast.info("Ver config.yaml")}
-              />
+        {loading ? (
+            <div className="flex justify-center py-12"><RefreshCw className="h-8 w-8 animate-spin text-primary" /></div>
+        ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {pipelines.map((pipeline) => (
+                <div key={pipeline.id} className="animate-fade-in">
+                <PipelineCard pipeline={pipeline} onRun={handleRunPipeline} onConfigure={() => toast.info("Ver config.yaml")} />
+                </div>
+            ))}
             </div>
-          ))}
-        </div>
+        )}
+
+        {!loading && pipelines.length === 0 && (
+            <div className="text-center p-12 border-2 border-dashed rounded-xl"><p className="text-muted-foreground">No hay pipelines configurados en el servidor.</p></div>
+        )}
       </div>
     </Layout>
   );
