@@ -146,9 +146,12 @@ class ETLEngine:
                     logger.error(f" {table}: Se agotaron los reintentos.")
                     self.log_audit(table, 0, "ERROR", str(e))
 
-    def run_pipeline(self):
-        logger.info(" Iniciando Pipeline Maestro...")
+    def run_pipeline(self, target_table=None):
+        logger.info(f" Iniciando Pipeline{' (' + target_table + ')' if target_table else ' Maestro'}...")
         for table_conf in self.config['tables']:
+            table = table_conf['name']
+            if target_table and table != target_table:
+                continue 
             self.process_table(table_conf)
 
 if __name__ == "__main__":

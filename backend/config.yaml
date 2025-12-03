@@ -2,22 +2,6 @@ settings:
   app_name: "DataMask ETL"
   batch_size: 1000
   extraction_window_days: 90
-  
-  # Nuevos campos para la página de Configuración
-  notifications:
-    enabled: true
-    email: "admin@empresa.com"
-    daily_summary: false
-  
-  security:
-    audit_detailed: true
-    encryption_at_rest: true
-    log_retention_days: 90
-  
-  scheduler:
-    enabled: true
-    auto_retry: true
-    timeout_minutes: 30
 
 databases:
   source_db_env_var: "SUPABASE_PROD_URI"
@@ -39,15 +23,15 @@ tables:
     masking_rules:
       total: "none"
 
-  - name: "detalle_ordenes"
-    pk: "id"
-    masking_rules:
-      producto: "hash_email" 
-      precio_unitario: "none"
-
   - name: "inventario"
     pk: "id"
     filter_column: "fecha_registro"
     masking_rules:
       producto: "hash_email"
       ubicacion: "redact"
+
+  - name: "detalle_ordenes"
+    pk: "id"
+    masking_rules:
+      producto: "hash_email" 
+      precio_unitario: "none"

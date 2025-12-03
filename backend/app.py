@@ -54,28 +54,80 @@ def get_source_tables():
 
 # --- ENDPOINT: DASHBOARD ---
 @app.route('/api/dashboard', methods=['GET'])
-def get_dashboard_stats():
+def get_dashboard():
     try:
         config = load_config()
         etl = ETLEngine()
+        
+        # 1. Estadísticas Generales (Lo que ya tenías)
         total_pipelines = len(config.get('tables', []))
         total_rules = sum(len(t.get('masking_rules', {})) for t in config.get('tables', []))
         
         with etl.engine_qa.connect() as conn:
+            # 2. Volumetría Total
             res_total = conn.execute(text("SELECT SUM(registros_procesados) FROM auditoria")).scalar() or 0
+            
+            # 3. Tasa de Éxito
             res_ok = conn.execute(text("SELECT COUNT(*) FROM auditoria WHERE estado LIKE 'SUCCESS%'")).scalar() or 0
             res_count = conn.execute(text("SELECT COUNT(*) FROM auditoria")).scalar() or 1
             success_rate = int((res_ok / res_count) * 100)
 
-        return jsonify({
-            "pipelines": total_pipelines,
-            "rules": total_rules,
-            "records": res_total,
-            "success_rate": success_rate
-        })
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+            # 4. NUEVO: Datos para Gráfica (Registros por Tabla)
+            chart_query = text("""
+                SELECT tabla, SUM(registros_procesados) as total 
+                FROM auditoria 
+                GROUP BY tabla 
+                ORDER BY total DESC 
+                LIMIT 5
+            """)
+            chart_data = [{"name": row[0], "value": row[1]} for row in conn.execute(chart_query)]
 
+            # 5. NUEVO: Actividad Reciente (Últimos 5 eventos)
+            activity_query = text("""
+                SELECT tabla, estado, fecha_ejecucion, registros_procesados 
+                FROM auditoria 
+                ORDER BY fecha_ejecucion DESC 
+                LIMIT 5
+            """)
+            recent_activity = [{
+                "table": row[0],
+                "status": "success" if "SUCCESS" in row[1] else "error",
+                "time": str(row[2]),
+                "records": row[3]
+            } for row in conn.execute(activity_query)]
+
+        # 6. NUEVO: Estado de Sistemas (Health Check Rápido)
+        system_status = {
+            "api": "online",
+            "scheduler": "running", # Asumimos que si la API responde, esto va bien
+            "db_prod": "unknown",
+            "db_qa": "connected" # Si llegamos aquí, QA funciona
+        }
+        
+        # Probar Prod rápido
+        try:
+            prod_uri = os.getenv(config['databases']['source_db_env_var'])
+            create_engine(prod_uri).connect().close()
+            system_status['db_prod'] = "connected"
+        except:
+            system_status['db_prod'] = "disconnected"
+
+        return jsonify({
+            "kpi": {
+                "pipelines": total_pipelines,
+                "rules": total_rules,
+                "records": res_total,
+                "success_rate": success_rate
+            },
+            "chart_data": chart_data,
+            "recent_activity": recent_activity,
+            "system_status": system_status
+        })
+
+    except Exception as e:
+        logger.error(f"Dashboard Error: {e}")
+        return jsonify({"error": str(e)}), 500
+        
 # --- ENDPOINT: CREAR PIPELINE INTELIGENTE ---
 @app.route('/api/pipelines', methods=['GET', 'POST'])
 def handle_pipelines():
@@ -161,12 +213,24 @@ def handle_pipelines():
 # --- OTROS ENDPOINTS ---
 @app.route('/api/run', methods=['POST'])
 def run_etl():
+    """Ejecuta un pipeline específico o todos si no se especifica"""
     try:
-        logger.info("📡 Ejecución manual")
+        # Leemos qué tabla quiere ejecutar el usuario
+        data = request.json or {}
+        tabla_objetivo = data.get('table') # Puede venir vacío
+        
+        logger.info(f"📡 Ejecución manual solicitada. Objetivo: {tabla_objetivo or 'TODAS'}")
+        
         engine = ETLEngine()
-        engine.run_pipeline()
-        return jsonify({"status": "success", "message": "Pipeline ejecutado."}), 200
-    except Exception as e: return jsonify({"status": "error", "message": str(e)}), 500
+        # Pasamos el nombre de la tabla al motor
+        engine.run_pipeline(target_table=tabla_objetivo)
+        
+        return jsonify({
+            "status": "success", 
+            "message": f"Pipeline {'para ' + tabla_objetivo if tabla_objetivo else 'completo'} ejecutado."
+        }), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/api/history', methods=['GET'])
 def get_history():
