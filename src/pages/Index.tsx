@@ -1,141 +1,39 @@
 import { Layout } from "@/components/Layout";
 import { Header } from "@/components/Header";
 import { StatsCard } from "@/components/StatsCard";
-import { PipelineCard } from "@/components/PipelineCard";
-import { ExecutionLogRow } from "@/components/ExecutionLogRow";
 import { Button } from "@/components/ui/button";
-import { 
-  GitBranch, 
-  Shield, 
-  Database, 
-  CheckCircle2, 
-  Plus,
-  ArrowRight
-} from "lucide-react";
-import { mockPipelines, mockExecutionLogs } from "@/data/mockData";
+import { GitBranch, Shield, Database, CheckCircle2, ArrowRight } from "lucide-react";
 import { Link } from "react-router-dom";
-import { toast } from "sonner";
+import { useEffect, useState } from "react";
 
 const Index = () => {
-  const stats = {
-    totalPipelines: mockPipelines.length,
-    activeMaskingRules: 5,
-    recordsProcessed: mockPipelines.reduce((acc, p) => acc + (p.recordsProcessed || 0), 0),
-    successRate: 85,
-  };
+  const [stats, setStats] = useState({ pipelines: 0, rules: 0, records: 0, success_rate: 0 });
 
-  const handleRunPipeline = (id: string) => {
-    const pipeline = mockPipelines.find(p => p.id === id);
-    toast.success(`Pipeline "${pipeline?.name}" iniciado`, {
-      description: "La ejecución comenzará en unos segundos.",
-    });
-  };
-
-  const recentLogs = mockExecutionLogs.slice(0, 3);
-  const topPipelines = mockPipelines.slice(0, 3);
+  useEffect(() => {
+    fetch('http://localhost:5000/api/dashboard')
+      .then(res => res.json())
+      .then(data => setStats(data))
+      .catch(err => console.error("Error cargando stats:", err));
+  }, []);
 
   return (
     <Layout>
-      <Header 
-        title="Dashboard" 
-        description="Monitorea y gestiona tus pipelines de datos"
-      />
-      
+      <Header title="Dashboard" description="Estado del sistema ETL en tiempo real" />
       <div className="p-6 space-y-8">
-        {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatsCard
-            title="Pipelines Activos"
-            value={stats.totalPipelines}
-            description="Total de pipelines configurados"
-            icon={GitBranch}
-            variant="primary"
-          />
-          <StatsCard
-            title="Reglas de Enmascaramiento"
-            value={stats.activeMaskingRules}
-            description="Reglas activas de anonimización"
-            icon={Shield}
-            variant="success"
-          />
-          <StatsCard
-            title="Registros Procesados"
-            value={stats.recordsProcessed.toLocaleString()}
-            description="Total en las últimas 24h"
-            icon={Database}
-            trend={{ value: 12, isPositive: true }}
-          />
-          <StatsCard
-            title="Tasa de Éxito"
-            value={`${stats.successRate}%`}
-            description="Ejecuciones exitosas"
-            icon={CheckCircle2}
-            variant="success"
-            trend={{ value: 3, isPositive: true }}
-          />
+          <StatsCard title="Pipelines Activos" value={stats.pipelines} description="Tablas configuradas" icon={GitBranch} variant="primary" />
+          <StatsCard title="Reglas Activas" value={stats.rules} description="Columnas enmascaradas" icon={Shield} variant="success" />
+          <StatsCard title="Registros Procesados" value={stats.records.toLocaleString()} description="Total histórico" icon={Database} />
+          <StatsCard title="Tasa de Éxito" value={`${stats.success_rate}%`} description="Ejecuciones exitosas" icon={CheckCircle2} variant="success" />
         </div>
-
-        {/* Pipelines Section */}
-        <section>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold text-foreground">Pipelines Recientes</h2>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" asChild>
-                <Link to="/pipelines">
-                  Ver todos
-                  <ArrowRight className="h-4 w-4" />
-                </Link>
-              </Button>
-              <Button size="sm">
-                <Plus className="h-4 w-4" />
-                Nuevo Pipeline
-              </Button>
-            </div>
-          </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {topPipelines.map((pipeline, index) => (
-              <div 
-                key={pipeline.id} 
-                className="animate-slide-up"
-                style={{ animationDelay: `${index * 100}ms` }}
-              >
-                <PipelineCard 
-                  pipeline={pipeline} 
-                  onRun={handleRunPipeline}
-                />
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* Execution History Section */}
-        <section>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold text-foreground">Historial de Ejecuciones</h2>
-            <Button variant="outline" size="sm" asChild>
-              <Link to="/history">
-                Ver historial completo
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-            </Button>
-          </div>
-          
-          <div className="space-y-3">
-            {recentLogs.map((log, index) => (
-              <div 
-                key={log.id} 
-                className="animate-slide-up"
-                style={{ animationDelay: `${index * 100}ms` }}
-              >
-                <ExecutionLogRow log={log} />
-              </div>
-            ))}
-          </div>
-        </section>
+        
+        <div className="flex justify-end">
+           <Button variant="outline" asChild>
+              <Link to="/pipelines">Ir a Pipelines <ArrowRight className="ml-2 h-4 w-4" /></Link>
+           </Button>
+        </div>
       </div>
     </Layout>
   );
 };
-
 export default Index;

@@ -2,7 +2,7 @@ import { Layout } from "@/components/Layout";
 import { Header } from "@/components/Header";
 import { PipelineCard } from "@/components/PipelineCard";
 import { Button } from "@/components/ui/button";
-import { Plus, Database, Lock } from "lucide-react";
+import { Plus, Database, Lock, RefreshCw } from "lucide-react";
 import { mockPipelines } from "@/data/mockData";
 import { toast } from "sonner";
 import { useState } from "react";
@@ -20,7 +20,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-// Definimos que este componente recibe el rol del usuario
 interface PipelinesProps {
   userRole?: string;
 }
@@ -30,13 +29,37 @@ const Pipelines = ({ userRole }: PipelinesProps) => {
   const [isRunning, setIsRunning] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newJob, setNewJob] = useState({ name: "", table: "" });
+  
+  // --- NUEVO ESTADO: Tablas detectadas automáticamente ---
+  const [availableTables, setAvailableTables] = useState<string[]>([]);
+  const [isLoadingTables, setIsLoadingTables] = useState(false);
+
+  // --- FUNCIÓN INTELIGENTE: Cargar tablas reales desde el Backend ---
+  const loadTables = async () => {
+    setIsLoadingTables(true);
+    try {
+      const res = await fetch('http://localhost:5000/api/source/tables');
+      if (!res.ok) throw new Error("Error de conexión");
+      const tables = await res.json();
+      
+      if (Array.isArray(tables)) {
+        setAvailableTables(tables);
+        toast.success(`Se detectaron ${tables.length} tablas en Producción`);
+      }
+    } catch (e) {
+      console.error(e);
+      toast.error("No se pudieron cargar las tablas de Producción");
+      // Fallback visual para pruebas si falla el backend
+      setAvailableTables(["clientes", "ordenes", "detalle_ordenes", "inventario", "proveedores"]); 
+    } finally {
+      setIsLoadingTables(false);
+    }
+  };
 
   const handleRunPipeline = async (id: string) => {
     const pipeline = pipelines.find(p => p.id === id);
 
-    // Lógica de ejecución (Permitida para ambos roles)
     if (id.startsWith('new-') || id.startsWith('real-')) {
-        // ... (lógica simulada igual que antes) ...
         toast.info("Simulación iniciada");
         setPipelines(prev => prev.map(p => p.id === id ? { ...p, status: 'running' } : p));
         setTimeout(() => {
@@ -82,7 +105,6 @@ const Pipelines = ({ userRole }: PipelinesProps) => {
   };
 
   const handleCreateJob = async () => {
-    // Seguridad Frontend: Bloquear si no es admin
     if (userRole !== 'admin') {
       toast.error("Acceso Denegado", { description: "Solo los desarrolladores pueden crear pipelines." });
       return;
@@ -93,7 +115,7 @@ const Pipelines = ({ userRole }: PipelinesProps) => {
       return;
     }
 
-    const toastId = toast.loading("Creando configuración...");
+    const toastId = toast.loading("Analizando estructura y creando pipeline...");
 
     try {
       const response = await fetch('http://localhost:5000/api/pipelines', {
@@ -101,6 +123,8 @@ const Pipelines = ({ userRole }: PipelinesProps) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newJob)
       });
+      
+      const data = await response.json();
 
       if (response.ok) {
         const newPipeline: Pipeline = {
@@ -111,7 +135,7 @@ const Pipelines = ({ userRole }: PipelinesProps) => {
           targetDb: 'supabase-qa',
           status: 'idle',
           tablesCount: 1,
-          maskingRulesCount: 2,
+          maskingRulesCount: 2, // Esto se actualizaría real si el backend devuelve el conteo
           recordsProcessed: 0
         };
 
@@ -120,12 +144,12 @@ const Pipelines = ({ userRole }: PipelinesProps) => {
         setIsModalOpen(false);
         
         toast.dismiss(toastId);
-        toast.success("Pipeline Creado");
+        toast.success("Pipeline Configurado", { description: data.message });
       } else {
-        throw new Error("Error al guardar");
+        throw new Error(data.message || "Error al guardar");
       }
     } catch (error: any) {
-        // Fallback Demo
+        // Fallback
         const simPipeline: Pipeline = {
             id: `new-${Date.now()}`,
             name: newJob.name,
@@ -141,7 +165,7 @@ const Pipelines = ({ userRole }: PipelinesProps) => {
         setNewJob({ name: "", table: "" });
         setIsModalOpen(false);
         toast.dismiss(toastId);
-        toast.success("Creado (Modo Demo)");
+        toast.success("Creado (Modo Simulación)", { description: "Backend no disponible" });
     }
   };
 
@@ -156,7 +180,6 @@ const Pipelines = ({ userRole }: PipelinesProps) => {
               <Database className="h-3 w-3" /> Ambiente: <strong>Supabase Cloud</strong>
             </span>
             
-            {/* Indicador Visual del Rol */}
             <span className={`text-xs px-2 py-1 rounded font-bold border ${
               userRole === 'admin' 
                 ? 'bg-purple-100 text-purple-700 border-purple-200' 
@@ -166,9 +189,13 @@ const Pipelines = ({ userRole }: PipelinesProps) => {
             </span>
           </div>
 
-          {/* --- BOTÓN CONDICIONAL (PUNTO 8) --- */}
+          {/* --- BOTÓN NUEVO JOB (SOLO ADMIN) --- */}
           {userRole === 'admin' ? (
-            <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+            <Dialog open={isModalOpen} onOpenChange={(open) => {
+                setIsModalOpen(open);
+                // AL ABRIR EL MODAL, CARGAMOS LAS TABLAS REALES
+                if (open) loadTables();
+            }}>
                 <DialogTrigger asChild>
                 <Button disabled={isRunning}>
                     <Plus className="h-4 w-4 mr-2" />
@@ -177,38 +204,49 @@ const Pipelines = ({ userRole }: PipelinesProps) => {
                 </DialogTrigger>
                 <DialogContent className="sm:max-w-[425px] bg-card border-border">
                 <DialogHeader>
-                    <DialogTitle>Configurar Nuevo Pipeline</DialogTitle>
-                    <DialogDescription>Define los parámetros ETL.</DialogDescription>
+                    <DialogTitle>Auto-Discovery Pipeline</DialogTitle>
+                    <DialogDescription>El sistema detectará automáticamente la estructura de la tabla.</DialogDescription>
                 </DialogHeader>
                 <div className="grid gap-4 py-4">
+                    
+                    {/* SELECTOR DE TABLAS DINÁMICO */}
                     <div className="grid gap-2">
-                    <Label htmlFor="name">Nombre</Label>
+                    <Label htmlFor="table">Tabla de Producción (Detectadas)</Label>
+                    <Select onValueChange={(val) => {
+                        setNewJob({ table: val, name: `Migración ${val.charAt(0).toUpperCase() + val.slice(1)}` });
+                    }}>
+                        <SelectTrigger>
+                            <SelectValue placeholder={isLoadingTables ? "Escaneando..." : "Seleccione una tabla..."} />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {availableTables.length === 0 ? (
+                                <SelectItem value="none" disabled>No se encontraron tablas nuevas</SelectItem>
+                            ) : (
+                                availableTables.map(table => (
+                                    <SelectItem key={table} value={table}>{table}</SelectItem>
+                                ))
+                            )}
+                        </SelectContent>
+                    </Select>
+                    </div>
+
+                    <div className="grid gap-2">
+                    <Label htmlFor="name">Nombre del Job</Label>
                     <Input 
                         id="name" 
-                        placeholder="Ej: Migración Nómina" 
                         value={newJob.name}
                         onChange={(e) => setNewJob({...newJob, name: e.target.value})}
                     />
                     </div>
-                    <div className="grid gap-2">
-                    <Label htmlFor="table">Tabla Origen</Label>
-                    <Select onValueChange={(val) => setNewJob({...newJob, table: val})}>
-                        <SelectTrigger><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
-                        <SelectContent>
-                        <SelectItem value="empleados">empleados (RH)</SelectItem>
-                        <SelectItem value="inventario">inventario</SelectItem>
-                        <SelectItem value="pagos">pagos</SelectItem>
-                        </SelectContent>
-                    </Select>
-                    </div>
                 </div>
                 <DialogFooter>
-                    <Button onClick={handleCreateJob}>Crear</Button>
+                    <Button onClick={handleCreateJob} disabled={isRunning || isLoadingTables}>
+                        {isLoadingTables ? <RefreshCw className="animate-spin h-4 w-4" /> : "Auto-Configurar"}
+                    </Button>
                 </DialogFooter>
                 </DialogContent>
             </Dialog>
           ) : (
-            // Botón Bloqueado para Operadores
             <Button disabled variant="secondary" className="opacity-70 cursor-not-allowed">
                 <Lock className="h-3 w-3 mr-2" />
                 Solo Lectura
