@@ -1,37 +1,32 @@
 settings:
-  app_name: "DataMask ETL"
+  app_name: DataMask ETL
   batch_size: 1000
   extraction_window_days: 90
-
 databases:
-  source_db_env_var: "SUPABASE_PROD_URI"
-  target_db_env_var: "SUPABASE_QA_URI"
-
+  source_db_env_var: SUPABASE_PROD_URI
+  target_db_env_var: SUPABASE_QA_URI
 tables:
-  - name: "clientes"
-    pk: "id"
-    filter_column: "fecha_registro"
-    masking_rules:
-      nombre: "fake_name"
-      email: "hash_email"
-      telefono: "preserve_format"
-      direccion: "redact"
-
-  - name: "ordenes"
-    pk: "id"
-    filter_column: "fecha"        
-    masking_rules:
-      total: "none"
-
-  - name: "inventario"
-    pk: "id"
-    filter_column: "fecha_registro"
-    masking_rules:
-      producto: "hash_email"
-      ubicacion: "redact"
-
-  - name: "detalle_ordenes"
-    pk: "id"
-    masking_rules:
-      producto: "hash_email" 
-      precio_unitario: "none"
+- name: clientes
+  pk: id
+  filter_column: fecha_registro
+  masking_rules:
+    nombre: fake_name
+    email: hash_email
+    telefono: preserve_format
+    direccion: redact
+- name: ordenes
+  pk: id
+  filter_column: fecha
+  masking_rules:
+    total: none
+- name: inventario
+  pk: id
+  filter_column: fecha_registro
+  masking_rules:
+    producto: hash_email
+    ubicacion: redact
+- name: detalle_ordenes
+  pk: id
+  masking_rules:
+    producto: hash_email
+    precio_unitario: none

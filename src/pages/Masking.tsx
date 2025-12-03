@@ -2,112 +2,297 @@ import { Layout } from "@/components/Layout";
 import { Header } from "@/components/Header";
 import { MaskingRuleCard } from "@/components/MaskingRuleCard";
 import { Button } from "@/components/ui/button";
-import { Plus, Filter, Info, Lock } from "lucide-react";
-import { mockMaskingRules } from "@/data/mockData";
-import { useState } from "react";
+import { Plus, Filter, Info, Lock, RefreshCw, RotateCcw, X } from "lucide-react"; // Agregamos X para limpiar
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
+import {
+  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { 
+  DropdownMenu, 
+  DropdownMenuContent, 
+  DropdownMenuItem, 
+  DropdownMenuLabel, 
+  DropdownMenuSeparator, 
+  DropdownMenuTrigger,
+  DropdownMenuCheckboxItem
+} from "@/components/ui/dropdown-menu";
 import { MaskingRule } from "@/types/pipeline";
+import { Badge } from "@/components/ui/badge";
 
-// 1. Definimos que recibe el rol
-interface MaskingProps {
-  userRole?: string;
-}
+interface MaskingProps { userRole?: string; }
 
 const Masking = ({ userRole }: MaskingProps) => {
-  const [rules, setRules] = useState<MaskingRule[]>(mockMaskingRules);
+  const [rules, setRules] = useState<MaskingRule[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  
+  // --- ESTADO PARA EL FILTRO ---
+  const [filterTable, setFilterTable] = useState<string | null>(null);
 
-  const handleToggleRule = (id: string, isActive: boolean) => {
-    // 2. Seguridad: Bloquear modificación si no es admin
-    if (userRole !== 'admin') {
-      toast.error("Acceso Denegado", { 
-        description: "Solo los desarrolladores pueden modificar las reglas de enmascaramiento." 
-      });
-      return;
-    }
+  // Formulario
+  const [tables, setTables] = useState<string[]>([]);
+  const [columns, setColumns] = useState<string[]>([]);
+  const [newRule, setNewRule] = useState({ table: "", column: "", type: "" });
 
-    setRules(prev => 
-      prev.map(rule => 
-        rule.id === id ? { ...rule, isActive } : rule
-      )
-    );
-    const rule = rules.find(r => r.id === id);
-    toast.success(`Regla "${rule?.name}" ${isActive ? 'activada' : 'desactivada'}`);
+  const adaptBackendRule = (backendRule: any): MaskingRule => {
+    let frontendType: any = 'custom';
+    if (backendRule.type === 'hash_email') frontendType = 'email';
+    if (backendRule.type === 'fake_name') frontendType = 'name';
+    if (backendRule.type === 'preserve_format') frontendType = 'phone';
+    if (backendRule.type === 'redact') frontendType = 'ssn';
+
+    return {
+        id: backendRule.id || Math.random().toString(),
+        name: backendRule.name || "Regla sin nombre",
+        type: frontendType,
+        replacement: backendRule.type || "custom",
+        tables: backendRule.table ? [backendRule.table] : [],
+        columns: backendRule.column ? [backendRule.column] : [],
+        isActive: backendRule.isActive ?? true
+    };
   };
 
-  const activeCount = rules.filter(r => r.isActive).length;
+  const fetchRules = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('http://localhost:5000/api/rules');
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          setRules(data.map(adaptBackendRule));
+        } else {
+          setRules([]);
+        }
+      }
+    } catch (e) {
+      setRules([]); 
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { fetchRules(); }, []);
+
+  const loadTables = () => {
+    fetch('http://localhost:5000/api/pipelines')
+      .then(res => res.json())
+      .then(data => {
+          if (Array.isArray(data)) {
+            setTables(data.map((p: any) => p.id));
+          }
+      })
+      .catch(() => toast.error("Error cargando tablas"));
+  };
+
+  const handleTableSelect = (table: string) => {
+    setNewRule({ ...newRule, table, column: "" });
+    setColumns([]);
+    fetch(`http://localhost:5000/api/source/columns/${table}`)
+      .then(res => res.json())
+      .then(data => {
+          if (Array.isArray(data)) setColumns(data);
+      })
+      .catch(() => toast.error("Error cargando columnas"));
+  };
+
+  const handleCreateRule = async () => {
+    if (!newRule.table || !newRule.column || !newRule.type) return toast.error("Faltan datos");
+    
+    const toastId = toast.loading("Aplicando regla...");
+    try {
+      const res = await fetch('http://localhost:5000/api/rules', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(newRule)
+      });
+      if (res.ok) {
+        toast.dismiss(toastId);
+        toast.success("Regla creada exitosamente");
+        setIsModalOpen(false);
+        fetchRules(); 
+        setNewRule({ table: "", column: "", type: "" });
+      } else throw new Error();
+    } catch (e) { 
+        toast.dismiss(toastId);
+        toast.error("Error al guardar"); 
+    }
+  };
+
+  const handleToggleRule = async (id: string, isActive: boolean) => {
+    if (userRole !== 'admin') return toast.error("Acceso Denegado");
+    
+    const rule = rules.find(r => r.id === id);
+    if (!rule) return;
+
+    if (!isActive) {
+        const toastId = toast.loading("Eliminando regla...");
+        try {
+            const res = await fetch('http://localhost:5000/api/rules', {
+                method: 'DELETE',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ table: rule.tables[0], column: rule.columns[0] })
+            });
+            
+            if (res.ok) {
+                toast.dismiss(toastId);
+                toast.success("Regla eliminada");
+                fetchRules();
+            } else throw new Error();
+        } catch(e) { 
+            toast.dismiss(toastId);
+            toast.error("Error al eliminar"); 
+        }
+    }
+  };
+
+  const handleResetDefaults = async () => {
+    if (userRole !== 'admin') return toast.error("Acceso Denegado");
+    const toastId = toast.loading("Restaurando...");
+    try {
+        const res = await fetch('http://localhost:5000/api/rules/reset', { method: 'POST' });
+        if (res.ok) {
+            toast.dismiss(toastId);
+            toast.success("Restaurado");
+            fetchRules(); 
+        } else throw new Error();
+    } catch (e) { toast.dismiss(toastId); toast.error("Error"); }
+  };
+
+  // --- LÓGICA DE FILTRADO ---
+  // Obtener tablas únicas presentes en las reglas actuales
+  const uniqueTables = Array.from(new Set(rules.flatMap(r => r.tables)));
+
+  // Filtrar reglas
+  const filteredRules = filterTable 
+    ? rules.filter(r => r.tables.includes(filterTable))
+    : rules;
 
   return (
     <Layout>
-      <Header 
-        title="Reglas de Enmascaramiento" 
-        description="Configura cómo se anonimizan los datos sensibles antes de cargarlos en QA"
-      />
+      <Header title="Reglas de Enmascaramiento" description="Gestión de privacidad de datos (PII)" />
       
       <div className="p-6 space-y-6">
-        {/* Info Banner */}
-        <div className="flex items-start gap-3 p-4 rounded-lg bg-primary/10 border border-primary/30">
-          <Info className="h-5 w-5 text-primary mt-0.5" />
+        <div className="flex items-start gap-3 p-4 rounded-lg bg-blue-50 border border-blue-200 text-blue-800">
+          <Info className="h-5 w-5 mt-0.5" />
           <div>
-            <p className="text-sm font-medium text-foreground">
-              Protege los datos sensibles automáticamente
-            </p>
-            <p className="text-sm text-muted-foreground mt-1">
-              Las reglas de enmascaramiento se aplican durante la fase de transformación del pipeline. 
-              Los datos originales nunca se copian a ambientes de prueba.
-            </p>
+            <p className="text-sm font-bold">Protección Activa</p>
+            <p className="text-sm opacity-90">Las reglas se aplican en la siguiente ejecución.</p>
           </div>
         </div>
 
-        {/* Actions Bar */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Button variant="outline" size="sm">
-              <Filter className="h-4 w-4 mr-2" />
-              Filtrar
-            </Button>
-            <p className="text-sm text-muted-foreground">
-              {activeCount} de {rules.length} reglas activas
-            </p>
+        <div className="flex justify-between items-center">
+           <div className="flex items-center gap-3">
+              
+              {/* --- BOTÓN FILTRAR FUNCIONAL --- */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant={filterTable ? "secondary" : "outline"} size="sm" className="gap-2">
+                    <Filter className="h-4 w-4" /> 
+                    {filterTable ? `Filtro: ${filterTable}` : "Filtrar por Tabla"}
+                    {filterTable && <Badge variant="secondary" className="ml-1 bg-white/20 text-xs h-5 px-1.5">{filteredRules.length}</Badge>}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-56">
+                  <DropdownMenuLabel>Selecciona una tabla</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => setFilterTable(null)}>
+                    Mostrar Todas
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  {uniqueTables.map(table => (
+                    <DropdownMenuCheckboxItem 
+                      key={table}
+                      checked={filterTable === table}
+                      onCheckedChange={() => setFilterTable(table === filterTable ? null : table)}
+                    >
+                      {table}
+                    </DropdownMenuCheckboxItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
 
-            {/* Indicador Visual de Rol */}
-            <span className={`text-xs px-2 py-1 rounded font-bold border ml-2 ${
-              userRole === 'admin' 
-                ? 'bg-purple-100 text-purple-700 border-purple-200' 
-                : 'bg-blue-100 text-blue-700 border-blue-200'
-            }`}>
-              {userRole === 'admin' ? 'DESARROLLADOR' : 'OPERADOR'}
-            </span>
-          </div>
+              {/* Botón para limpiar filtro rápido si está activo */}
+              {filterTable && (
+                <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground" onClick={() => setFilterTable(null)}>
+                    <X className="h-4 w-4" />
+                </Button>
+              )}
 
-          {/* 3. Botón Condicional */}
-          {userRole === 'admin' ? (
-            <Button onClick={() => toast.info("La creación se gestiona en config.yaml")}>
-              <Plus className="h-4 w-4 mr-2" />
-              Nueva Regla
-            </Button>
-          ) : (
-            <Button disabled variant="secondary" className="opacity-70 cursor-not-allowed">
-              <Lock className="h-4 w-4 mr-2" />
-              Solo Lectura
-            </Button>
-          )}
+              <span className="text-sm text-muted-foreground font-mono border-l pl-3 ml-1">
+                {filteredRules.length} de {rules.length} reglas
+              </span>
+              
+              <Button variant="ghost" size="sm" onClick={fetchRules}>
+                  <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`}/>
+              </Button>
+           </div>
+
+           <div className="flex gap-2">
+             {userRole === 'admin' && (
+                <Button variant="secondary" onClick={handleResetDefaults}>
+                    <RotateCcw className="h-4 w-4 mr-2" /> Restaurar
+                </Button>
+             )}
+
+             {userRole === 'admin' ? (
+               <Dialog open={isModalOpen} onOpenChange={(open) => { setIsModalOpen(open); if(open) loadTables(); }}>
+                 <DialogTrigger asChild><Button><Plus className="h-4 w-4 mr-2"/> Nueva Regla</Button></DialogTrigger>
+                 <DialogContent>
+                   <DialogHeader><DialogTitle>Agregar Regla</DialogTitle></DialogHeader>
+                   <div className="grid gap-4 py-4">
+                      <div className="grid gap-2"><Label>Tabla</Label>
+                          <Select onValueChange={handleTableSelect}>
+                              <SelectTrigger><SelectValue placeholder="Selecciona tabla..."/></SelectTrigger>
+                              <SelectContent>{tables.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+                          </Select>
+                      </div>
+                      <div className="grid gap-2"><Label>Columna</Label>
+                          <Select onValueChange={v => setNewRule({...newRule, column: v})} disabled={!columns.length}>
+                              <SelectTrigger><SelectValue placeholder="Selecciona columna..."/></SelectTrigger>
+                              <SelectContent>{columns.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+                          </Select>
+                      </div>
+                      <div className="grid gap-2"><Label>Tipo</Label>
+                          <Select onValueChange={v => setNewRule({...newRule, type: v})}>
+                              <SelectTrigger><SelectValue placeholder="Método..."/></SelectTrigger>
+                              <SelectContent>
+                                  <SelectItem value="hash_email">Hash (Email)</SelectItem>
+                                  <SelectItem value="fake_name">Faker (Nombre)</SelectItem>
+                                  <SelectItem value="preserve_format">Formato Preservado</SelectItem>
+                                  <SelectItem value="redact">Redacción (****)</SelectItem>
+                              </SelectContent>
+                          </Select>
+                      </div>
+                   </div>
+                   <DialogFooter><Button onClick={handleCreateRule}>Guardar</Button></DialogFooter>
+                 </DialogContent>
+               </Dialog>
+             ) : (
+               <Button disabled variant="secondary"><Lock className="h-4 w-4 mr-2"/> Solo Lectura</Button>
+             )}
+           </div>
         </div>
 
-        {/* Rules Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {rules.map((rule, index) => (
-            <div 
-              key={rule.id} 
-              className="animate-slide-up"
-              style={{ animationDelay: `${index * 100}ms` }}
-            >
-              <MaskingRuleCard 
-                rule={rule} 
-                onToggle={handleToggleRule}
-              />
+        {/* Grid de Reglas (FILTRADO) */}
+        {loading ? (
+            <div className="flex justify-center py-12"><RefreshCw className="h-8 w-8 animate-spin text-primary" /></div>
+        ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {filteredRules.map((rule) => (
+                    <MaskingRuleCard key={rule.id} rule={rule} onToggle={handleToggleRule} />
+                ))}
+                {!loading && filteredRules.length === 0 && (
+                    <div className="col-span-3 text-center p-12 border-2 border-dashed rounded-xl">
+                        <p className="text-muted-foreground">
+                            {rules.length > 0 ? "No hay reglas para esta tabla." : "No hay reglas configuradas."}
+                        </p>
+                    </div>
+                )}
             </div>
-          ))}
-        </div>
+        )}
       </div>
     </Layout>
   );

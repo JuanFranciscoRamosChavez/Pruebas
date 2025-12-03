@@ -86,36 +86,53 @@ const Pipelines = ({ userRole }: PipelinesProps) => {
   };
 
   // --- 3. EJECUTAR PIPELINE ---
-  const handleRunPipeline = async (id: string) => {
+const handleRunPipeline = async (id: string) => {
     const pipeline = pipelines.find(p => p.id === id);
+
+    if (id.startsWith('new-') || id.startsWith('real-')) {
+        // ... (código de simulación igual) ...
+        return;
+    }
+
     setIsRunning(true);
     setPipelines(prev => prev.map(p => p.id === id ? { ...p, status: 'running' } : p));
-    
-    const toastId = toast.loading(`Ejecutando ${id}...`);
+    const toastId = toast.loading(`Ejecutando ${pipeline?.name}...`);
 
     try {
+      // --- CAMBIO CLAVE AQUÍ ---
+      // Enviamos el nombre de la tabla (id) al backend
       const response = await fetch('http://localhost:5000/api/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ table: id }) // <--- ¡ESTO ES LO NUEVO!
+        body: JSON.stringify({ table: id }) 
       });
+      // -------------------------
 
       let data = { message: "Proceso finalizado." };
       try { data = await response.json(); } catch(e) {}
 
       if (response.ok) {
+        setPipelines(prev => prev.map(p => 
+          p.id === id ? { 
+            ...p, 
+            status: 'success', 
+            lastRun: new Date().toISOString(),
+            recordsProcessed: 150 // Esto se actualizará al recargar
+          } : p
+        ));
         toast.dismiss(toastId);
         toast.success("¡Éxito!", { description: data.message });
-        // Recargar datos reales
+        
+        // Recargar lista para ver datos reales de la BD
         fetchPipelines();
       } else {
         throw new Error(data.message || `Error ${response.status}`);
       }
     } catch (error: any) {
-      console.error(error);
+      console.error("Error:", error);
       setPipelines(prev => prev.map(p => p.id === id ? { ...p, status: 'error' } : p));
       toast.dismiss(toastId);
-      toast.error("Fallo en ejecución", { description: "Revisa la conexión con el Backend." });
+      toast.error("Error", { description: error.message || "Fallo de conexión" });
     } finally {
       setIsRunning(false);
     }
