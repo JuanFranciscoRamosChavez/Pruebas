@@ -38,6 +38,9 @@ const Login = ({ onLogin }: LoginProps) => {
     // 1. Buscar en Admins (Ahora DBA)
     const isAdmin = CREDENTIALS.admin.find(u => u.user === username && u.pass === password);
     if (isAdmin) {
+      // Guardamos el nombre para mostrarlo en el Header
+      localStorage.setItem("userName", isAdmin.name || "Admin");
+      
       toast.success(`¡Hola, ${isAdmin.name}!`, { description: "Sesión iniciada como DBA" });
       onLogin('admin');
       return;
@@ -46,6 +49,9 @@ const Login = ({ onLogin }: LoginProps) => {
     // 2. Buscar en Operadores (Ahora Desarrollador/Tester)
     const isOp = CREDENTIALS.operator.find(u => u.user === username && u.pass === password);
     if (isOp) {
+      // Guardamos el nombre para mostrarlo en el Header
+      localStorage.setItem("userName", isOp.name || "Operador");
+
       toast.success(`¡Hola, ${isOp.name}!`, { description: "Sesión iniciada como Desarrollador/Tester" });
       onLogin('operator');
       return;

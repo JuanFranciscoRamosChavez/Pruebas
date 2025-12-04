@@ -7,11 +7,8 @@ import {
   History, 
   Database, 
   Settings,
-  Terminal,
-  LogOut 
+  Terminal
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { toast } from "sonner";
 
 const navItems = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard" },
@@ -23,14 +20,6 @@ const navItems = [
 ];
 
 export function Sidebar() {
-  
-  const handleLogout = () => {
-    toast.info("Cerrando sesión...");
-    localStorage.removeItem("userRole");
-    // Recargar para volver al Login
-    setTimeout(() => window.location.href = "/", 500);
-  };
-
   return (
     <aside className="w-64 min-h-screen bg-sidebar border-r border-sidebar-border flex flex-col">
       <div className="p-6 border-b border-sidebar-border">
@@ -62,17 +51,8 @@ export function Sidebar() {
           </NavLink>
         ))}
       </nav>
-
-      <div className="p-4 border-t border-sidebar-border space-y-4">
-        <Button 
-          variant="destructive" 
-          className="w-full justify-start pl-4 bg-red-900/20 hover:bg-red-900/40 text-red-400 border border-red-900/50"
-          onClick={handleLogout}
-        >
-          <LogOut className="h-4 w-4 mr-2" />
-          Cerrar Sesión
-        </Button>
-      </div>
+      
+      {/* Se eliminó el footer con el botón de LogOut */}
     </aside>
   );
 }
