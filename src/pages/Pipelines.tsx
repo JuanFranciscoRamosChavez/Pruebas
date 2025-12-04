@@ -6,9 +6,6 @@ import { Plus, Database, Lock, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { useState, useEffect } from "react";
 import { Pipeline } from "@/types/pipeline";
-// Eliminamos el import de mockData para no usarlo por error
-// import { mockPipelines } from "@/data/mockData"; 
-
 import {
   Dialog,
   DialogContent,
@@ -27,9 +24,8 @@ interface PipelinesProps {
 }
 
 const Pipelines = ({ userRole }: PipelinesProps) => {
-  // CAMBIO 1: Iniciar vacío, no con datos falsos
   const [pipelines, setPipelines] = useState<Pipeline[]>([]); 
-  const [loading, setLoading] = useState(true); // Inicia cargando
+  const [loading, setLoading] = useState(true);
   const [isRunning, setIsRunning] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newJob, setNewJob] = useState({ name: "", table: "" });
@@ -48,13 +44,11 @@ const Pipelines = ({ userRole }: PipelinesProps) => {
           setPipelines(data);
         }
       } else {
-        // Si falla el backend, dejamos la lista vacía (no mock)
         setPipelines([]);
-        // Opcional: toast.error("No se pudo cargar la lista de pipelines");
       }
     } catch (e) {
       console.error("Error de conexión:", e);
-      setPipelines([]); // Aseguramos limpieza
+      setPipelines([]);
     } finally {
       setLoading(false);
     }
@@ -86,27 +80,19 @@ const Pipelines = ({ userRole }: PipelinesProps) => {
   };
 
   // --- 3. EJECUTAR PIPELINE ---
-const handleRunPipeline = async (id: string) => {
+  const handleRunPipeline = async (id: string) => {
     const pipeline = pipelines.find(p => p.id === id);
-
-    if (id.startsWith('new-') || id.startsWith('real-')) {
-        // ... (código de simulación igual) ...
-        return;
-    }
 
     setIsRunning(true);
     setPipelines(prev => prev.map(p => p.id === id ? { ...p, status: 'running' } : p));
     const toastId = toast.loading(`Ejecutando ${pipeline?.name}...`);
 
     try {
-      // --- CAMBIO CLAVE AQUÍ ---
-      // Enviamos el nombre de la tabla (id) al backend
       const response = await fetch('http://localhost:5000/api/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ table: id }) 
       });
-      // -------------------------
 
       let data = { message: "Proceso finalizado." };
       try { data = await response.json(); } catch(e) {}
@@ -117,13 +103,12 @@ const handleRunPipeline = async (id: string) => {
             ...p, 
             status: 'success', 
             lastRun: new Date().toISOString(),
-            recordsProcessed: 150 // Esto se actualizará al recargar
+            recordsProcessed: 150 
           } : p
         ));
         toast.dismiss(toastId);
         toast.success("¡Éxito!", { description: data.message });
         
-        // Recargar lista para ver datos reales de la BD
         fetchPipelines();
       } else {
         throw new Error(data.message || `Error ${response.status}`);
@@ -159,7 +144,7 @@ const handleRunPipeline = async (id: string) => {
         toast.success("Pipeline Creado", { description: data.message });
         setIsModalOpen(false);
         setNewJob({ name: "", table: "" });
-        fetchPipelines(); // Recargar lista inmediatamente
+        fetchPipelines(); 
       } else {
         throw new Error(data.message);
       }
@@ -186,7 +171,8 @@ const handleRunPipeline = async (id: string) => {
                 ? 'bg-purple-100 text-purple-700 border-purple-200' 
                 : 'bg-blue-100 text-blue-700 border-blue-200'
             }`}>
-              {userRole === 'admin' ? 'DESARROLLADOR' : 'OPERADOR'}
+              {/* AQUÍ ESTÁ EL CAMBIO DE ROL VISUAL */}
+              {userRole === 'admin' ? 'DBA' : 'Desarrollador/Tester'}
             </span>
           </div>
 

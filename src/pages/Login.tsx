@@ -35,18 +35,18 @@ const Login = ({ onLogin }: LoginProps) => {
     e.preventDefault();
     setError("");
 
-    // 1. Buscar en Admins
+    // 1. Buscar en Admins (Ahora DBA)
     const isAdmin = CREDENTIALS.admin.find(u => u.user === username && u.pass === password);
     if (isAdmin) {
-      toast.success(`¡Hola, ${isAdmin.name}!`, { description: "Sesión iniciada como DESARROLLADOR" });
+      toast.success(`¡Hola, ${isAdmin.name}!`, { description: "Sesión iniciada como DBA" });
       onLogin('admin');
       return;
     }
 
-    // 2. Buscar en Operadores
+    // 2. Buscar en Operadores (Ahora Desarrollador/Tester)
     const isOp = CREDENTIALS.operator.find(u => u.user === username && u.pass === password);
     if (isOp) {
-      toast.success(`¡Hola, ${isOp.name}!`, { description: "Sesión iniciada como OPERADOR" });
+      toast.success(`¡Hola, ${isOp.name}!`, { description: "Sesión iniciada como Desarrollador/Tester" });
       onLogin('operator');
       return;
     }
