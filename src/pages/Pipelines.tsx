@@ -197,7 +197,7 @@ const handleRunPipeline = async (id: string) => {
             }}>
                 <DialogTrigger asChild>
                     <Button disabled={isRunning}>
-                        <Plus className="h-4 w-4 mr-2" /> Nuevo Job
+                        <Plus className="h-4 w-4 mr-2" /> Nuevo Pipeline
                     </Button>
                 </DialogTrigger>
                 <DialogContent className="sm:max-w-[425px] bg-card border-border">
@@ -268,7 +268,7 @@ const handleRunPipeline = async (id: string) => {
                 {(!pipelines || pipelines.length === 0) && (
                     <div className="text-center p-12 border-2 border-dashed rounded-xl bg-muted/10">
                         <p className="text-muted-foreground text-lg font-medium">No hay pipelines configurados.</p>
-                        {userRole === 'admin' && <p className="text-sm text-muted-foreground mt-2">Haz clic en "Nuevo Job" para comenzar.</p>}
+                        {userRole === 'admin' && <p className="text-sm text-muted-foreground mt-2">Haz clic en "Nuevo Pipeline" para comenzar.</p>}
                     </div>
                 )}
             </>
