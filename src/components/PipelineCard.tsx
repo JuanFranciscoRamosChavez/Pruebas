@@ -3,7 +3,7 @@ import { StatusBadge } from "./StatusBadge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Play, Settings, Database, Shield, Clock, ArrowRight } from "lucide-react";
-import { formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow, differenceInMinutes } from "date-fns"; // Importamos differenceInMinutes
 import { es } from "date-fns/locale";
 
 interface PipelineCardProps {
@@ -13,6 +13,24 @@ interface PipelineCardProps {
 }
 
 export function PipelineCard({ pipeline, onRun, onConfigure }: PipelineCardProps) {
+  
+  // Lógica para determinar el estado visual
+  let displayStatus = pipeline.status;
+
+  // Si hay una fecha de última ejecución y el estado NO es 'running' (ejecutando)
+  if (pipeline.lastRun && pipeline.status !== 'running') {
+    const lastRunDate = new Date(pipeline.lastRun);
+    const now = new Date();
+    
+    // Calculamos la diferencia en minutos
+    const minutesSinceLastRun = differenceInMinutes(now, lastRunDate);
+
+    // Si pasaron más de 30 minutos, forzamos el estado a 'idle' (Inactivo)
+    if (minutesSinceLastRun > 30) {
+      displayStatus = 'idle';
+    }
+  }
+
   const formatDate = (dateString?: string) => {
     if (!dateString) return 'Nunca';
     return formatDistanceToNow(new Date(dateString), { addSuffix: true, locale: es });
@@ -30,7 +48,8 @@ export function PipelineCard({ pipeline, onRun, onConfigure }: PipelineCardProps
               {pipeline.description}
             </p>
           </div>
-          <StatusBadge status={pipeline.status} />
+          {/* Usamos displayStatus en lugar de pipeline.status */}
+          <StatusBadge status={displayStatus} />
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
