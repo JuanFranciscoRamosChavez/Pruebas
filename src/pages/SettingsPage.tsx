@@ -28,7 +28,6 @@ interface AppSettings {
   };
   security: {
     audit_detailed: boolean;
-    // Eliminado: encryption_at_rest
     log_retention_days: number;
   };
   scheduler: {
@@ -39,6 +38,8 @@ interface AppSettings {
   };
 }
 
+// ESTA ES LA "PARTE DETERMINADA" (Valores de Fábrica)
+// Si quieres cambiar los valores a los que se restaura, edita esto aquí.
 const defaultSettings: AppSettings = {
   app_name: "DataMask ETL",
   batch_size: 1000,
@@ -95,6 +96,15 @@ const SettingsPage = ({ userRole }: SettingsPageProps) => {
       toast.dismiss(toastId);
       toast.error("Error al guardar configuración");
     }
+  };
+
+  // --- NUEVA FUNCIÓN: RESTAURAR VALORES ---
+  const handleRestoreDefaults = () => {
+    // Sobrescribimos el estado actual con la constante "defaultSettings"
+    setSettings(defaultSettings);
+    toast.info("Valores restaurados a su estado original.", {
+        description: "Haz clic en 'Guardar Cambios' para aplicar permanentemente."
+    });
   };
 
   const updateNotification = (key: string, val: any) => 
@@ -160,7 +170,7 @@ const SettingsPage = ({ userRole }: SettingsPageProps) => {
           </Card>
         )}
 
-        {/* SECCIÓN 2: REPORTE Y AUDITORÍA - Visible para todos, pero con controles limitados */}
+        {/* SECCIÓN 2: REPORTE Y AUDITORÍA */}
         <Card className="card-gradient border-border/50">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -172,7 +182,6 @@ const SettingsPage = ({ userRole }: SettingsPageProps) => {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {/* El switch de configuración solo lo ve el DBA */}
             {userRole === 'admin' && (
               <div className="flex items-center justify-between">
                 <div>
@@ -186,7 +195,6 @@ const SettingsPage = ({ userRole }: SettingsPageProps) => {
               </div>
             )}
             
-            {/* El botón de descarga lo ven todos */}
             <div className={userRole === 'admin' ? "pt-4 border-t border-border/30" : ""}>
                 <Button 
                     variant="outline" 
@@ -224,8 +232,6 @@ const SettingsPage = ({ userRole }: SettingsPageProps) => {
                 />
               </div>
               
-              {/* OPCIÓN DE ENCRIPTACIÓN ELIMINADA */}
-
               <div className="pt-2">
                 <Label>Retención de logs (días)</Label>
                 <Input 
@@ -277,7 +283,9 @@ const SettingsPage = ({ userRole }: SettingsPageProps) => {
               <Save className="mr-2 h-4 w-4" />
               Guardar Cambios
             </Button>
-            <Button variant="outline" onClick={() => window.location.reload()}>
+            
+            {/* BOTÓN CORREGIDO */}
+            <Button variant="outline" onClick={handleRestoreDefaults}>
               <RotateCcw className="mr-2 h-4 w-4" />
               Restaurar Valores
             </Button>

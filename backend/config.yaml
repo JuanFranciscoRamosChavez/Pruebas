@@ -1,16 +1,16 @@
 settings:
-  app_name: DataMask
-  batch_size: 100
-  extraction_window_days: 8
+  app_name: DataMask ETL
+  batch_size: 1000
+  extraction_window_days: 90
   security:
     audit_detailed: true
     encryption_at_rest: false
     log_retention_days: 90
   scheduler:
-    enabled: true
-    auto_retry: true
+    enabled: false
+    auto_retry: false
     timeout_minutes: 30
-    interval_minutes: 60
+    interval_minutes: 5
   notifications:
     enabled: false
     email: ''
