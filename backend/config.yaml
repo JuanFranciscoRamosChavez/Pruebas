@@ -1,7 +1,20 @@
 settings:
   app_name: DataMask ETL
   batch_size: 1000
-  extraction_window_days: 90
+  extraction_window_days: 10
+  notifications:
+    enabled: true
+    email: admin@empresa.com
+    daily_summary: true
+  security:
+    audit_detailed: true
+    encryption_at_rest: true
+    log_retention_days: 19
+  scheduler:
+    enabled: true
+    auto_retry: true
+    timeout_minutes: 30
+    interval_minutes: 60
 databases:
   source_db_env_var: SUPABASE_PROD_URI
   target_db_env_var: SUPABASE_QA_URI
@@ -19,14 +32,15 @@ tables:
   filter_column: fecha
   masking_rules:
     total: none
+- name: detalle_ordenes
+  pk: id
+  filter_column: id
+  masking_rules:
+    producto: hash_email
+    precio_unitario: none
 - name: inventario
   pk: id
   filter_column: fecha_registro
   masking_rules:
     producto: hash_email
     ubicacion: redact
-- name: detalle_ordenes
-  pk: id
-  masking_rules:
-    producto: hash_email
-    precio_unitario: none

@@ -4,12 +4,12 @@ import hashlib
 import logging
 import pandas as pd
 import time
+import json  # <--- IMPORTANTE
 from datetime import datetime
 from sqlalchemy import create_engine, text
 from faker import Faker
 from dotenv import load_dotenv
 
-# Configuración de rutas y entorno
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(os.path.join(BASE_DIR, '.env'))
 
@@ -18,29 +18,24 @@ logger = logging.getLogger(__name__)
 
 class ETLEngine:
     def __init__(self):
-        # PUNTO 1: Configuración Paramétrica
         config_path = os.path.join(BASE_DIR, 'config.yaml')
         with open(config_path, 'r') as f:
             self.config = yaml.safe_load(f)
         
         self.faker = Faker('es_MX')
         self.salt = os.getenv("HASH_SALT", "default_salt").encode()
-        
-        # Configuración de Reintentos (PUNTO 6)
         self.max_retries = 3  
         self.retry_wait = 2   
         
-        # PUNTO 8: Seguridad (Credenciales ocultas)
         try:
             prod_uri = os.getenv(self.config['databases']['source_db_env_var'])
             qa_uri = os.getenv(self.config['databases']['target_db_env_var'])
             self.engine_prod = create_engine(prod_uri, pool_pre_ping=True)
             self.engine_qa = create_engine(qa_uri, pool_pre_ping=True)
         except Exception as e:
-            logger.error(f" Error crítico de configuración: {e}")
+            logger.error(f"❌ Error crítico de configuración: {e}")
             raise
 
-    # PUNTO 2: Enmascaramiento
     def mask_value(self, value, rule):
         if value is None: return None
         if rule == 'hash_email':
@@ -50,7 +45,6 @@ class ETLEngine:
         elif rule == 'redact': return "****"
         return value
 
-    # PUNTO 5: Auditoría
     def log_audit(self, table, records, status, error=None):
         try:
             with self.engine_qa.connect() as conn:
@@ -58,35 +52,63 @@ class ETLEngine:
                     INSERT INTO auditoria (tabla, registros_procesados, estado, mensaje, fecha_ejecucion)
                     VALUES (:t, :r, :s, :m, :f)
                 """), {
-                    "t": table, 
-                    "r": records, 
-                    "s": status, 
-                    "m": str(error)[:500] if error else "OK", 
-                    "f": datetime.now()
+                    "t": table, "r": records, "s": status, 
+                    "m": str(error)[:500] if error else "OK", "f": datetime.now()
                 })
                 conn.commit()
         except Exception as e:
-            logger.error(f" Fallo crítico en auditoría: {e}")
+            logger.error(f"⚠️ Fallo crítico en auditoría: {e}")
 
-    # PUNTO 4: Lógica Incremental (Marca de Agua)
+    # --- NUEVA FUNCIÓN: GUARDAR JSON LOCAL ---
+    def save_json_report(self, table, status, records, mode, error_msg=None):
+        try:
+            # Verificar si el usuario activó el reporte en config.yaml
+            enabled = self.config.get('settings', {}).get('notifications', {}).get('enabled', False)
+            if not enabled: return
+
+            report_path = os.path.join(BASE_DIR, 'notifications_log.json')
+            
+            new_event = {
+                "timestamp": datetime.now().isoformat(),
+                "table": table,
+                "status": status,
+                "mode": mode,
+                "records": records,
+                "details": error_msg if error_msg else "OK"
+            }
+
+            # Leer existente
+            history = []
+            if os.path.exists(report_path):
+                try:
+                    with open(report_path, 'r') as f: history = json.load(f)
+                except: history = []
+
+            # Agregar al principio
+            history.insert(0, new_event)
+            
+            # Guardar (Máximo 50 últimos eventos)
+            with open(report_path, 'w') as f:
+                json.dump(history[:50], f, indent=4)
+                
+        except Exception as e:
+            logger.error(f"Error guardando JSON: {e}")
+
     def get_max_date(self, table, col):
         try:
             with self.engine_qa.connect() as conn:
                 return conn.execute(text(f"SELECT MAX({col}) FROM {table}")).scalar()
         except Exception: return None
 
-    # Procesamiento individual por tabla con Reintentos
     def process_table(self, table_conf):
         table = table_conf['name']
         pk = table_conf['pk']
         filter_col = table_conf.get('filter_column')
         
-        # Bucle de Reintentos (PUNTO 6)
         for attempt in range(1, self.max_retries + 1):
             try:
-                logger.info(f" Procesando {table} (Intento {attempt}/{self.max_retries})...")
+                logger.info(f"🔄 Procesando {table} (Intento {attempt}/{self.max_retries})...")
                 
-                # 1. Detectar Delta (PUNTO 4)
                 last_date = self.get_max_date(table, filter_col)
                 query = f"SELECT * FROM {table}"
                 mode = "FULL"
@@ -95,69 +117,50 @@ class ETLEngine:
                     query += f" WHERE {filter_col} > '{last_date}'"
                     mode = "INCREMENTAL"
                 
-                # 2. Extracción
                 df = pd.read_sql(query, self.engine_prod)
                 
                 if df.empty:
-                    logger.info(f"    {table}: Sin novedades.")
-                    return # Éxito (nada que hacer)
+                    logger.info(f"   💤 {table}: Sin novedades.")
+                    return 
 
-                logger.info(f"    {table}: {len(df)} registros nuevos ({mode}).")
+                logger.info(f"   📥 {table}: {len(df)} registros nuevos ({mode}).")
 
-                # 3. Transformación (PUNTO 2)
                 for col, rule in table_conf.get('masking_rules', {}).items():
                     if col in df.columns:
                         df[col] = df[col].apply(lambda x: self.mask_value(x, rule))
 
-                # 4. Carga con Idempotencia (PUNTO 7 - Upsert simulado)
                 with self.engine_qa.connect() as conn:
                     if not df.empty:
                         ids = tuple(df[pk].tolist())
                         if ids:
-                            # Truco para tupla de 1 elemento en SQL
                             id_str = str(ids) if len(ids) > 1 else f"({ids[0]})"
-                            # Borramos lo viejo antes de meter lo nuevo (evita duplicados)
                             conn.execute(text(f"DELETE FROM {table} WHERE {pk} IN {id_str}"))
                             conn.commit()
                 
-                tamanio_lote = self.config['settings'].get('batch_size', 1000)  
-
-                # Insertar en lotes DINÁMICOS (PUNTO 9)
-                df.to_sql(
-                    table, 
-                    self.engine_qa, 
-                    if_exists='append', 
-                    index=False, 
-                    method='multi', 
-                    chunksize=tamanio_lote  
-                )
+                df.to_sql(table, self.engine_qa, if_exists='append', index=False, method='multi', chunksize=1000)
                 
-                # Log final
                 self.log_audit(table, len(df), f"SUCCESS - {mode}")
-                logger.info(f" {table}: Sincronización completada (Lotes de {tamanio_lote}).")
+                
+                # --- GUARDAR EN JSON ---
+                self.save_json_report(table, "SUCCESS", len(df), mode)
+                
+                logger.info(f"✅ {table}: Sincronización completada.")
                 return 
 
             except Exception as e:
-                logger.error(f" Fallo en intento {attempt}: {e}")
+                logger.error(f"⚠️ Fallo en intento {attempt}: {e}")
                 if attempt < self.max_retries:
                     time.sleep(self.retry_wait)
                 else:
-                    # Si se acaban los intentos, registramos error final
-                    logger.error(f" {table}: Se agotaron los reintentos.")
+                    logger.error(f"❌ {table}: Se agotaron los reintentos.")
                     self.log_audit(table, 0, "ERROR", str(e))
+                    # --- GUARDAR ERROR EN JSON ---
+                    self.save_json_report(table, "ERROR", 0, "FAILED", str(e))
 
-    # Modificamos para aceptar el argumento target_table
     def run_pipeline(self, target_table=None):
-        logger.info(f"🚀 Iniciando Pipeline{' (' + target_table + ')' if target_table else ' Maestro'}...")
-        
+        logger.info("🚀 Iniciando Pipeline...")
         for table_conf in self.config['tables']:
-            table_name = table_conf['name']
-            
-            # --- FILTRO: Si piden una tabla específica, saltamos las demás ---
-            if target_table and table_name != target_table:
-                continue 
-            # ---------------------------------------------------------------
-            
+            if target_table and table_conf['name'] != target_table: continue 
             self.process_table(table_conf)
 
 if __name__ == "__main__":
