@@ -5,35 +5,48 @@ from faker import Faker
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
 
-# 1. Cargar configuración
+# 1. Cargar configuración con UTF-8 para evitar errores
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(os.path.join(BASE_DIR, '.env'))
 
-# CORRECCIÓN: Se agrega encoding='utf-8' explícito
 with open(os.path.join(BASE_DIR, 'config.yaml'), 'r', encoding='utf-8') as f:
     config = yaml.safe_load(f)
 
 fake = Faker('es_MX')
 
-def init_tables():
+def generate_source_data(counts=None):
+    """
+    Regenera el esquema y siembra datos en Producción y QA.
+    counts: { 'productos': 30, 'clientes': 50, 'ordenes': 100, 'detalles': 300 }
+    """
+    
+    # Valores por defecto si no vienen del frontend
+    if not counts:
+        counts = {
+            "productos": 30,
+            "clientes": 50,
+            "ordenes": 100,
+            "detalles": 300
+        }
+
     prod_uri = os.getenv(config['databases']['source_db_env_var'])
     qa_uri = os.getenv(config['databases']['target_db_env_var'])
     
     if not prod_uri or not qa_uri:
-        print(" Error: Faltan URIs")
-        return
+        raise Exception("Faltan las URIs de base de datos en .env")
 
     engine_prod = create_engine(prod_uri)
     engine_qa = create_engine(qa_uri)
     
     # ---------------------------------------------------------
-    # 1. PREPARAR PRODUCCIÓN (CON INTEGRIDAD ENTRE PRODUCTOS)
+    # 1. PREPARAR PRODUCCIÓN (RECREAR ESQUEMA Y DATOS)
     # ---------------------------------------------------------
     print(f" Conectando a Producción...")
     with engine_prod.connect() as conn:
-        # Borramos todo en orden inverso a las dependencias
+        # Borrar tablas en orden correcto
         conn.execute(text("DROP TABLE IF EXISTS detalle_ordenes, ordenes, inventario, clientes CASCADE"))
         
+        # Crear tablas limpias
         conn.execute(text("""
             CREATE TABLE clientes (
                 id SERIAL PRIMARY KEY,
@@ -43,10 +56,9 @@ def init_tables():
                 direccion VARCHAR(200),
                 fecha_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
-            -- Creamos Inventario ANTES que Detalles
             CREATE TABLE inventario (
                 id SERIAL PRIMARY KEY,
-                producto VARCHAR(100) UNIQUE, -- Debe ser único para ser FK
+                producto VARCHAR(100) UNIQUE,
                 stock INTEGER,
                 ubicacion VARCHAR(50),
                 fecha_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -60,20 +72,19 @@ def init_tables():
             CREATE TABLE detalle_ordenes (
                 id SERIAL PRIMARY KEY,
                 orden_id INTEGER REFERENCES ordenes(id),
-                -- CONEXIÓN REALIZADA: FK hacia inventario
                 producto VARCHAR(100) REFERENCES inventario(producto), 
                 cantidad INTEGER,
                 precio_unitario DECIMAL(10, 2)
             );
         """))
         
-        print(" Sembrando datos en Producción...")
+        print(f" Sembrando datos en Producción...")
         
-        # 1. Generar Lista de Productos Reales (Inventario)
+        # 1. Generar Productos (Inventario)
+        limit_prod = int(counts.get('productos', 30))
         lista_productos = []
-        for _ in range(30): # 30 productos en el catálogo
+        for _ in range(limit_prod): 
             prod = f"{fake.word().capitalize()} {fake.word()}-{random.randint(100,999)}"
-            # Evitar duplicados al generar
             while prod in lista_productos:
                 prod = f"{fake.word().capitalize()} {fake.word()}-{random.randint(100,999)}"
             lista_productos.append(prod)
@@ -81,31 +92,37 @@ def init_tables():
             conn.execute(text("INSERT INTO inventario (producto, stock, ubicacion) VALUES (:p, :s, :u)"),
                          {"p": prod, "s": random.randint(0, 500), "u": f"Pasillo {random.randint(1,10)}"})
 
-        # 2. Clientes
-        for _ in range(50): 
+        # 2. Generar Clientes
+        limit_cli = int(counts.get('clientes', 50))
+        for _ in range(limit_cli): 
             conn.execute(text("INSERT INTO clientes (nombre, email, telefono, direccion) VALUES (:n, :e, :t, :d)"), 
                          {"n": fake.name(), "e": fake.email(), "t": f"+52 55{random.randint(10000000,99999999)}", "d": fake.address()})
         
-        # 3. Órdenes
-        for _ in range(100): 
+        # 3. Generar Órdenes
+        limit_ord = int(counts.get('ordenes', 100))
+        # Como recreamos la tabla, los IDs irán de 1 a limit_ord.
+        # Los clientes van de 1 a limit_cli.
+        for _ in range(limit_ord): 
             conn.execute(text("INSERT INTO ordenes (cliente_id, total) VALUES (:c, :t)"), 
-                         {"c": random.randint(1, 50), "t": random.uniform(100, 5000)})
+                         {"c": random.randint(1, limit_cli), "t": random.uniform(100, 5000)})
         
-        # 4. Detalles (Usando SOLO productos que existen en inventario)
-        for _ in range(300):
+        # 4. Generar Detalles
+        # Usamos productos de la lista generada y IDs de ordenes válidos (1 a limit_ord)
+        limit_det = int(counts.get('detalles', 300))
+        for _ in range(limit_det):
             conn.execute(text("INSERT INTO detalle_ordenes (orden_id, producto, cantidad, precio_unitario) VALUES (:o, :p, :c, :pu)"), 
                          {
-                             "o": random.randint(1, 100), 
-                             "p": random.choice(lista_productos), # <--- AQUÍ ESTÁ LA CONEXIÓN
+                             "o": random.randint(1, limit_ord), 
+                             "p": random.choice(lista_productos), 
                              "c": random.randint(1, 10), 
                              "pu": random.uniform(10, 500)
                          })
         conn.commit()
 
     # ---------------------------------------------------------
-    # 2. PREPARAR QA (ESQUEMA ESPEJO)
+    # 2. PREPARAR QA (RECREAR ESQUEMA VACÍO)
     # ---------------------------------------------------------
-    print(f" Conectando a QA...")
+    print(f" Preparando esquema limpio en QA...")
     with engine_qa.connect() as conn:
         conn.execute(text("DROP TABLE IF EXISTS detalle_ordenes, ordenes, inventario, clientes, auditoria CASCADE"))
         conn.execute(text("""
@@ -113,7 +130,7 @@ def init_tables():
             
             CREATE TABLE inventario (
                 id INTEGER PRIMARY KEY, 
-                producto VARCHAR(100) UNIQUE, -- Mantenemos la restricción UNIQUE
+                producto VARCHAR(100) UNIQUE,
                 stock INTEGER, 
                 ubicacion VARCHAR(50), 
                 fecha_registro TIMESTAMP
@@ -124,7 +141,6 @@ def init_tables():
             CREATE TABLE detalle_ordenes (
                 id INTEGER PRIMARY KEY, 
                 orden_id INTEGER REFERENCES ordenes(id), 
-                -- INTEGRIDAD REFERENCIAL EN QA TAMBIÉN
                 producto VARCHAR(100) REFERENCES inventario(producto), 
                 cantidad INTEGER, 
                 precio_unitario DECIMAL(10, 2)
@@ -139,7 +155,7 @@ def init_tables():
         """))
         conn.commit()
     
-    print(" ¡Base de datos regenerada")
+    print(" ¡Base de datos regenerada y lista!")
 
 if __name__ == "__main__":
-    init_tables()
+    generate_source_data()
