@@ -56,7 +56,7 @@ const App = () => {
             <Route path="/masking" element={<Masking userRole={userRole} />} />
             <Route path="/history" element={<History />} />
             <Route path="/connections" element={<Connections />} />
-            <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/settings" element={<SettingsPage userRole={userRole} />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
