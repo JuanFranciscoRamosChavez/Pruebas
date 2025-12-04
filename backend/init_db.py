@@ -8,7 +8,9 @@ from sqlalchemy import create_engine, text
 # 1. Cargar configuración
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(os.path.join(BASE_DIR, '.env'))
-with open(os.path.join(BASE_DIR, 'config.yaml'), 'r') as f:
+
+# CORRECCIÓN: Se agrega encoding='utf-8' explícito
+with open(os.path.join(BASE_DIR, 'config.yaml'), 'r', encoding='utf-8') as f:
     config = yaml.safe_load(f)
 
 fake = Faker('es_MX')

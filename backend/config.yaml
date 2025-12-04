@@ -11,6 +11,10 @@ settings:
     auto_retry: true
     timeout_minutes: 30
     interval_minutes: 60
+  notifications:
+    enabled: false
+    email: ''
+    daily_summary: false
 databases:
   source_db_env_var: SUPABASE_PROD_URI
   target_db_env_var: SUPABASE_QA_URI
@@ -36,6 +40,7 @@ tables:
     total: none
 - name: detalle_ordenes
   pk: id
+  filter_column: id
   masking_rules:
     producto: hash_email
     precio_unitario: none

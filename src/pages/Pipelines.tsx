@@ -2,10 +2,12 @@ import { Layout } from "@/components/Layout";
 import { Header } from "@/components/Header";
 import { PipelineCard } from "@/components/PipelineCard";
 import { Button } from "@/components/ui/button";
-import { Plus, Database, Lock, RefreshCw } from "lucide-react";
+import { Plus, Database, Lock, RefreshCw, Percent, Play, Layers } from "lucide-react";
 import { toast } from "sonner";
 import { useState, useEffect } from "react";
 import { Pipeline } from "@/types/pipeline";
+import { Slider } from "@/components/ui/slider";
+
 import {
   Dialog,
   DialogContent,
@@ -26,39 +28,38 @@ interface PipelinesProps {
 const Pipelines = ({ userRole }: PipelinesProps) => {
   const [pipelines, setPipelines] = useState<Pipeline[]>([]); 
   const [loading, setLoading] = useState(true);
-  const [isRunning, setIsRunning] = useState(false);
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [newJob, setNewJob] = useState({ name: "", table: "" });
   
+  // Estado para Ejecución (Individual o Todo)
+  const [isRunModalOpen, setIsRunModalOpen] = useState(false);
+  const [targetPipeline, setTargetPipeline] = useState<string | null>(null); // null = ejecutar todo
+  const [runPercentage, setRunPercentage] = useState(100);
+  const [isRunning, setIsRunning] = useState(false);
+
   const [availableTables, setAvailableTables] = useState<string[]>([]);
   const [isLoadingTables, setIsLoadingTables] = useState(false);
 
-  // --- 1. CARGAR PIPELINES DEL BACKEND ---
   const fetchPipelines = async () => {
     setLoading(true);
     try {
       const res = await fetch('http://localhost:5000/api/pipelines');
       if (res.ok) {
         const data = await res.json();
-        if (Array.isArray(data)) {
-          setPipelines(data);
-        }
+        if (Array.isArray(data)) setPipelines(data);
       } else {
         setPipelines([]);
       }
     } catch (e) {
-      console.error("Error de conexión:", e);
+      console.error("Error de conexion:", e);
       setPipelines([]);
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchPipelines();
-  }, []);
+  useEffect(() => { fetchPipelines(); }, []);
 
-  // --- 2. CARGAR TABLAS DISPONIBLES ---
   const loadTables = async () => {
     setIsLoadingTables(true);
     try {
@@ -67,63 +68,75 @@ const Pipelines = ({ userRole }: PipelinesProps) => {
         const tables = await res.json();
         if (Array.isArray(tables)) {
           setAvailableTables(tables);
-          toast.success(`Se detectaron ${tables.length} tablas en Producción`);
+          toast.success(`Se detectaron ${tables.length} tablas en Produccion`);
         }
       }
     } catch (e) {
-      console.error(e);
       toast.error("No se pudieron cargar las tablas");
-      setAvailableTables([]);
     } finally {
       setIsLoadingTables(false);
     }
   };
 
-  // --- 3. EJECUTAR PIPELINE ---
-  const handleRunPipeline = async (id: string) => {
-    const pipeline = pipelines.find(p => p.id === id);
+  // Abre modal para UN pipeline
+  const openSingleRun = (id: string) => {
+    setTargetPipeline(id);
+    setRunPercentage(100);
+    setIsRunModalOpen(true);
+  };
 
+  // Abre modal para TODOS los pipelines
+  const openAllRun = () => {
+    setTargetPipeline(null); // null significa TODOS
+    setRunPercentage(100);
+    setIsRunModalOpen(true);
+  };
+
+  const executeRun = async () => {
+    setIsRunModalOpen(false);
     setIsRunning(true);
-    setPipelines(prev => prev.map(p => p.id === id ? { ...p, status: 'running' } : p));
-    const toastId = toast.loading(`Ejecutando ${pipeline?.name}...`);
+    
+    // Feedback visual
+    if (targetPipeline) {
+        setPipelines(prev => prev.map(p => p.id === targetPipeline ? { ...p, status: 'running' } : p));
+    } else {
+        setPipelines(prev => prev.map(p => ({ ...p, status: 'running' })));
+    }
+
+    const toastId = toast.loading(
+        targetPipeline ? "Ejecutando pipeline..." : "Ejecutando TODOS los pipelines..."
+    );
 
     try {
       const response = await fetch('http://localhost:5000/api/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ table: id }) 
+        body: JSON.stringify({ 
+            table: targetPipeline, // Si es null, el backend corre todo
+            percentage: runPercentage 
+        }) 
       });
 
-      let data = { message: "Proceso finalizado." };
-      try { data = await response.json(); } catch(e) {}
+      const data = await response.json();
 
       if (response.ok) {
-        setPipelines(prev => prev.map(p => 
-          p.id === id ? { 
-            ...p, 
-            status: 'success', 
-            lastRun: new Date().toISOString(),
-            recordsProcessed: 150 
-          } : p
-        ));
         toast.dismiss(toastId);
-        toast.success("¡Éxito!", { description: data.message });
-        
-        fetchPipelines();
+        toast.success("Exito", { description: data.message });
+        fetchPipelines(); // Recargar estados reales
       } else {
         throw new Error(data.message || `Error ${response.status}`);
       }
     } catch (error: any) {
-      console.error("Error:", error);
-      setPipelines(prev => prev.map(p => p.id === id ? { ...p, status: 'error' } : p));
       toast.dismiss(toastId);
-      toast.error("Error", { description: error.message || "Fallo de conexión" });
+      toast.error("Error", { description: error.message });
+      // Restaurar estado en caso de fallo de red inmediato
+      fetchPipelines();
     } finally {
       setIsRunning(false);
+      setTargetPipeline(null);
     }
   };
 
-  // --- 4. CREAR NUEVO PIPELINE ---
   const handleCreateJob = async () => {
     if (userRole !== 'admin') return toast.error("Acceso Denegado");
     if (!newJob.name || !newJob.table) return toast.error("Faltan datos");
@@ -137,127 +150,164 @@ const Pipelines = ({ userRole }: PipelinesProps) => {
         body: JSON.stringify(newJob)
       });
 
-      const data = await response.json();
-
       if (response.ok) {
         toast.dismiss(toastId);
-        toast.success("Pipeline Creado", { description: data.message });
-        setIsModalOpen(false);
+        toast.success("Pipeline Creado");
+        setIsCreateModalOpen(false);
         setNewJob({ name: "", table: "" });
         fetchPipelines(); 
       } else {
-        throw new Error(data.message);
+        throw new Error("Error al crear");
       }
     } catch (error: any) {
       toast.dismiss(toastId);
-      toast.error("Error al crear", { description: "No se pudo guardar en el servidor." });
+      toast.error("Error al crear");
     }
   };
 
   return (
     <Layout>
-      <Header title="Gestión de Pipelines" description="Control de migración de datos sensibles" />
+      <Header title="Gestion de Pipelines" description="Control de migracion de datos sensibles" />
       
       <div className="p-6 space-y-6">
-        {/* Barra Superior */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <span className="text-sm text-muted-foreground bg-muted px-3 py-1 rounded-full border border-border/50 flex items-center gap-2">
               <Database className="h-3 w-3" /> Ambiente: <strong>Supabase Cloud</strong>
             </span>
-            
             <span className={`text-xs px-2 py-1 rounded font-bold border ${
-              userRole === 'admin' 
-                ? 'bg-purple-100 text-purple-700 border-purple-200' 
-                : 'bg-blue-100 text-blue-700 border-blue-200'
+              userRole === 'admin' ? 'bg-purple-100 text-purple-700 border-purple-200' : 'bg-blue-100 text-blue-700 border-blue-200'
             }`}>
-              {/* AQUÍ ESTÁ EL CAMBIO DE ROL VISUAL */}
               {userRole === 'admin' ? 'DBA' : 'Desarrollador/Tester'}
             </span>
           </div>
 
-          {userRole === 'admin' ? (
-            <Dialog open={isModalOpen} onOpenChange={(open) => {
-                setIsModalOpen(open);
-                if (open) loadTables();
-            }}>
-                <DialogTrigger asChild>
-                    <Button disabled={isRunning}>
-                        <Plus className="h-4 w-4 mr-2" /> Nuevo Pipeline
-                    </Button>
-                </DialogTrigger>
-                <DialogContent className="sm:max-w-[425px] bg-card border-border">
-                    <DialogHeader>
-                        <DialogTitle>Auto-Discovery Pipeline</DialogTitle>
-                        <DialogDescription>Detectar tablas disponibles en Producción.</DialogDescription>
-                    </DialogHeader>
-                    <div className="grid gap-4 py-4">
-                        <div className="grid gap-2">
-                            <Label htmlFor="table">Tabla Origen</Label>
-                            <Select onValueChange={(val) => {
-                                setNewJob({ table: val, name: `Migración ${val.charAt(0).toUpperCase() + val.slice(1)}` });
-                            }}>
-                                <SelectTrigger>
-                                    <SelectValue placeholder={isLoadingTables ? "Escaneando..." : "Seleccionar tabla..."} />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {availableTables.map((table) => (
-                                        <SelectItem key={table} value={table}>{table}</SelectItem>
-                                    ))}
-                                    {availableTables.length === 0 && !isLoadingTables && (
-                                        <SelectItem value="none" disabled>No se encontraron tablas</SelectItem>
-                                    )}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                        <div className="grid gap-2">
-                            <Label htmlFor="name">Nombre del Job</Label>
-                            <Input 
-                                id="name" 
-                                value={newJob.name}
-                                onChange={(e) => setNewJob({...newJob, name: e.target.value})}
-                            />
-                        </div>
-                    </div>
-                    <DialogFooter>
-                        <Button onClick={handleCreateJob} disabled={isLoadingTables}>
-                            {isLoadingTables ? <RefreshCw className="animate-spin h-4 w-4" /> : "Auto-Configurar"}
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
-          ) : (
-            <Button disabled variant="secondary" className="opacity-70 cursor-not-allowed">
-                <Lock className="h-3 w-3 mr-2" /> Solo Lectura
+          <div className="flex gap-2">
+            {/* BOTÓN EJECUTAR TODO (Abre el mismo modal de config de porcentaje) */}
+            <Button 
+                variant="default" 
+                className="bg-orange-600 hover:bg-orange-700 text-white"
+                onClick={openAllRun}
+                disabled={isRunning || pipelines.length === 0}
+            >
+                <Layers className="h-4 w-4 mr-2" />
+                {isRunning ? "Procesando..." : "Ejecutar Todo"}
             </Button>
-          )}
+
+            {userRole === 'admin' ? (
+                <Dialog open={isCreateModalOpen} onOpenChange={(open) => { setIsCreateModalOpen(open); if (open) loadTables(); }}>
+                    <DialogTrigger asChild>
+                        <Button disabled={isRunning}>
+                            <Plus className="h-4 w-4 mr-2" /> Nuevo Pipeline
+                        </Button>
+                    </DialogTrigger>
+                    <DialogContent className="sm:max-w-[425px] bg-card border-border">
+                        <DialogHeader>
+                            <DialogTitle>Auto-Discovery Pipeline</DialogTitle>
+                            <DialogDescription>Detectar tablas disponibles en Produccion.</DialogDescription>
+                        </DialogHeader>
+                        <div className="grid gap-4 py-4">
+                            <div className="grid gap-2">
+                                <Label htmlFor="table">Tabla Origen</Label>
+                                <Select onValueChange={(val) => {
+                                    setNewJob({ table: val, name: `Migracion ${val.charAt(0).toUpperCase() + val.slice(1)}` });
+                                }}>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder={isLoadingTables ? "Escaneando..." : "Seleccionar tabla..."} />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {availableTables.map((table) => (
+                                            <SelectItem key={table} value={table}>{table}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="grid gap-2">
+                                <Label htmlFor="name">Nombre del Job</Label>
+                                <Input 
+                                    id="name" 
+                                    value={newJob.name}
+                                    onChange={(e) => setNewJob({...newJob, name: e.target.value})}
+                                />
+                            </div>
+                        </div>
+                        <DialogFooter>
+                            <Button onClick={handleCreateJob} disabled={isLoadingTables}>
+                                {isLoadingTables ? <RefreshCw className="animate-spin h-4 w-4" /> : "Auto-Configurar"}
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+            ) : (
+                <Button disabled variant="secondary" className="opacity-70 cursor-not-allowed">
+                    <Lock className="h-3 w-3 mr-2" /> Solo Lectura
+                </Button>
+            )}
+          </div>
         </div>
 
-        {/* ESTADO DE CARGA / VACÍO / DATOS */}
+        {/* MODAL UNIVERSAL DE EJECUCION (Se usa para 1 pipeline o para todos) */}
+        <Dialog open={isRunModalOpen} onOpenChange={setIsRunModalOpen}>
+            <DialogContent className="sm:max-w-[425px] bg-card border-border">
+                <DialogHeader>
+                    <DialogTitle>
+                        {targetPipeline ? "Ejecutar Pipeline" : "Ejecución Masiva"}
+                    </DialogTitle>
+                    <DialogDescription>
+                        Configura el volumen de datos a procesar.
+                    </DialogDescription>
+                </DialogHeader>
+                
+                <div className="grid gap-6 py-4">
+                    <div className="grid gap-4 p-4 border border-border rounded-lg bg-muted/20">
+                        <div className="flex justify-between items-center">
+                            <Label className="flex items-center gap-2">
+                                <Percent className="h-4 w-4 text-primary" />
+                                Porcentaje de Datos
+                            </Label>
+                            <span className="text-sm font-bold font-mono bg-primary/10 px-2 py-1 rounded text-primary">
+                                {runPercentage}%
+                            </span>
+                        </div>
+                        <Slider 
+                            value={[runPercentage]} 
+                            onValueChange={(val) => setRunPercentage(val[0])} 
+                            max={100} 
+                            step={5} 
+                            className="py-2"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                            {runPercentage === 100 
+                                ? "Se migrara TODA la información." 
+                                : `Se seleccionara aleatoriamente el ${runPercentage}% de los registros.`}
+                        </p>
+                    </div>
+                </div>
+
+                <DialogFooter>
+                    <Button variant="outline" onClick={() => setIsRunModalOpen(false)}>Cancelar</Button>
+                    <Button onClick={executeRun} className={!targetPipeline ? "bg-orange-600 hover:bg-orange-700" : ""}>
+                        <Play className="h-4 w-4 mr-2" /> 
+                        {targetPipeline ? "Confirmar" : "Ejecutar Todo"}
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+
         {loading ? (
              <div className="flex justify-center py-12"><RefreshCw className="h-8 w-8 animate-spin text-primary" /></div>
         ) : (
-            <>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {pipelines?.map((pipeline) => (
-                        <div key={pipeline.id} className="animate-fade-in">
-                            <PipelineCard 
-                                pipeline={pipeline} 
-                                onRun={handleRunPipeline}
-                                onConfigure={() => toast.info("Ver config.yaml")}
-                            />
-                        </div>
-                    ))}
-                </div>
-                
-                {/* Mensaje si no hay nada real */}
-                {(!pipelines || pipelines.length === 0) && (
-                    <div className="text-center p-12 border-2 border-dashed rounded-xl bg-muted/10">
-                        <p className="text-muted-foreground text-lg font-medium">No hay pipelines configurados.</p>
-                        {userRole === 'admin' && <p className="text-sm text-muted-foreground mt-2">Haz clic en "Nuevo Pipeline" para comenzar.</p>}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {pipelines?.map((pipeline) => (
+                    <div key={pipeline.id} className="animate-fade-in">
+                        <PipelineCard 
+                            pipeline={pipeline} 
+                            onRun={openSingleRun} 
+                            onConfigure={() => toast.info("Ver config.yaml")}
+                        />
                     </div>
-                )}
-            </>
+                ))}
+            </div>
         )}
       </div>
     </Layout>
