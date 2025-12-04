@@ -2,7 +2,7 @@ import { Layout } from "@/components/Layout";
 import { Header } from "@/components/Header";
 import { PipelineCard } from "@/components/PipelineCard";
 import { Button } from "@/components/ui/button";
-import { Plus, Database, Lock, RefreshCw, Percent, Play, Layers, Sprout } from "lucide-react";
+import { Database, Lock, RefreshCw, Percent, Play, Layers, Sprout } from "lucide-react";
 import { toast } from "sonner";
 import { useState, useEffect } from "react";
 import { Pipeline } from "@/types/pipeline";
@@ -19,7 +19,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface PipelinesProps {
   userRole?: string;
@@ -30,12 +29,10 @@ const Pipelines = ({ userRole }: PipelinesProps) => {
   const [loading, setLoading] = useState(true);
   
   // Modals
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isRunModalOpen, setIsRunModalOpen] = useState(false);
   const [isSeedModalOpen, setIsSeedModalOpen] = useState(false);
 
   // States
-  const [newJob, setNewJob] = useState({ name: "", table: "" });
   const [targetPipeline, setTargetPipeline] = useState<string | null>(null);
   const [runPercentage, setRunPercentage] = useState(100);
   const [isRunning, setIsRunning] = useState(false);
@@ -48,9 +45,6 @@ const Pipelines = ({ userRole }: PipelinesProps) => {
     detalles: 300 // Total de detalles a generar
   });
   const [isSeeding, setIsSeeding] = useState(false);
-
-  const [availableTables, setAvailableTables] = useState<string[]>([]);
-  const [isLoadingTables, setIsLoadingTables] = useState(false);
 
   const fetchPipelines = async () => {
     setLoading(true);
@@ -71,24 +65,6 @@ const Pipelines = ({ userRole }: PipelinesProps) => {
   };
 
   useEffect(() => { fetchPipelines(); }, []);
-
-  const loadTables = async () => {
-    setIsLoadingTables(true);
-    try {
-      const res = await fetch('http://localhost:5000/api/source/tables');
-      if (res.ok) {
-        const tables = await res.json();
-        if (Array.isArray(tables)) {
-          setAvailableTables(tables);
-          toast.success(`Se detectaron ${tables.length} tablas en Produccion`);
-        }
-      }
-    } catch (e) {
-      toast.error("No se pudieron cargar las tablas");
-    } finally {
-      setIsLoadingTables(false);
-    }
-  };
 
   // --- SEEDING (GENERAR DATOS) ---
   const handleSeedData = async () => {
@@ -171,34 +147,6 @@ const Pipelines = ({ userRole }: PipelinesProps) => {
     }
   };
 
-  const handleCreateJob = async () => {
-    if (userRole !== 'admin') return toast.error("Acceso Denegado");
-    if (!newJob.name || !newJob.table) return toast.error("Faltan datos");
-
-    const toastId = toast.loading("Configurando pipeline...");
-
-    try {
-      const response = await fetch('http://localhost:5000/api/pipelines', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newJob)
-      });
-
-      if (response.ok) {
-        toast.dismiss(toastId);
-        toast.success("Pipeline Creado");
-        setIsCreateModalOpen(false);
-        setNewJob({ name: "", table: "" });
-        fetchPipelines(); 
-      } else {
-        throw new Error("Error al crear");
-      }
-    } catch (error: any) {
-      toast.dismiss(toastId);
-      toast.error("Error al crear");
-    }
-  };
-
   return (
     <Layout>
       <Header title="Gestion de Pipelines" description="Control de migracion de datos sensibles" />
@@ -221,7 +169,8 @@ const Pipelines = ({ userRole }: PipelinesProps) => {
             {userRole === 'admin' && (
                 <Dialog open={isSeedModalOpen} onOpenChange={setIsSeedModalOpen}>
                     <DialogTrigger asChild>
-                        <Button variant="outline" className="text-green-600 border-green-600/30 hover:bg-green-50">
+                        {/* CAMBIO AQUÍ: Agregado hover:text-green-700 para evitar que se ponga blanco */}
+                        <Button variant="outline" className="text-green-600 border-green-600/30 hover:bg-green-50 hover:text-green-700">
                             <Sprout className="h-4 w-4 mr-2" />
                             Generar Datos Fuente
                         </Button>
@@ -235,7 +184,7 @@ const Pipelines = ({ userRole }: PipelinesProps) => {
                         </DialogHeader>
                         <div className="grid gap-4 py-2">
                             <div className="grid grid-cols-2 items-center gap-4">
-                                <Label htmlFor="prods">Productos</Label>
+                                <Label htmlFor="prods">Inventario (Productos)</Label>
                                 <Input id="prods" type="number" value={seedCounts.productos} onChange={(e) => setSeedCounts({...seedCounts, productos: Number(e.target.value)})} />
                             </div>
                             <div className="grid grid-cols-2 items-center gap-4">
@@ -269,56 +218,6 @@ const Pipelines = ({ userRole }: PipelinesProps) => {
                 <Layers className="h-4 w-4 mr-2" />
                 {isRunning ? "Procesando..." : "Ejecutar Todo"}
             </Button>
-
-            {userRole === 'admin' ? (
-                <Dialog open={isCreateModalOpen} onOpenChange={(open) => { setIsCreateModalOpen(open); if (open) loadTables(); }}>
-                    <DialogTrigger asChild>
-                        <Button disabled={isRunning}>
-                            <Plus className="h-4 w-4 mr-2" /> Nuevo Pipeline
-                        </Button>
-                    </DialogTrigger>
-                    <DialogContent className="sm:max-w-[425px] bg-card border-border">
-                        <DialogHeader>
-                            <DialogTitle>Auto-Discovery Pipeline</DialogTitle>
-                            <DialogDescription>Detectar tablas disponibles en Produccion.</DialogDescription>
-                        </DialogHeader>
-                        <div className="grid gap-4 py-4">
-                            <div className="grid gap-2">
-                                <Label htmlFor="table">Tabla Origen</Label>
-                                <Select onValueChange={(val) => {
-                                    setNewJob({ table: val, name: `Migracion ${val.charAt(0).toUpperCase() + val.slice(1)}` });
-                                }}>
-                                    <SelectTrigger>
-                                        <SelectValue placeholder={isLoadingTables ? "Escaneando..." : "Seleccionar tabla..."} />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {availableTables.map((table) => (
-                                            <SelectItem key={table} value={table}>{table}</SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                            <div className="grid gap-2">
-                                <Label htmlFor="name">Nombre del Job</Label>
-                                <Input 
-                                    id="name" 
-                                    value={newJob.name}
-                                    onChange={(e) => setNewJob({...newJob, name: e.target.value})}
-                                />
-                            </div>
-                        </div>
-                        <DialogFooter>
-                            <Button onClick={handleCreateJob} disabled={isLoadingTables}>
-                                {isLoadingTables ? <RefreshCw className="animate-spin h-4 w-4" /> : "Auto-Configurar"}
-                            </Button>
-                        </DialogFooter>
-                    </DialogContent>
-                </Dialog>
-            ) : (
-                <Button disabled variant="secondary" className="opacity-70 cursor-not-allowed">
-                    <Lock className="h-3 w-3 mr-2" /> Solo Lectura
-                </Button>
-            )}
           </div>
         </div>
 

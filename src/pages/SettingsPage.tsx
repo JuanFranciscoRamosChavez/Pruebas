@@ -28,7 +28,7 @@ interface AppSettings {
   };
   security: {
     audit_detailed: boolean;
-    encryption_at_rest: boolean;
+    // Eliminado: encryption_at_rest
     log_retention_days: number;
   };
   scheduler: {
@@ -44,12 +44,12 @@ const defaultSettings: AppSettings = {
   batch_size: 1000,
   extraction_window_days: 90,
   notifications: { enabled: false, email: "", daily_summary: false },
-  security: { audit_detailed: true, encryption_at_rest: false, log_retention_days: 90 },
+  security: { audit_detailed: true, log_retention_days: 90 },
   scheduler: { enabled: false, auto_retry: false, timeout_minutes: 30, interval_minutes: 5 }
 };
 
 interface SettingsPageProps {
-  userRole: string;
+  userRole?: string;
 }
 
 const SettingsPage = ({ userRole }: SettingsPageProps) => {
@@ -223,16 +223,9 @@ const SettingsPage = ({ userRole }: SettingsPageProps) => {
                   onCheckedChange={c => updateSecurity('audit_detailed', c)} 
                 />
               </div>
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label>Encriptación de logs</Label>
-                  <p className="text-sm text-muted-foreground">Encripta los logs en reposo</p>
-                </div>
-                <Switch 
-                  checked={settings.security.encryption_at_rest} 
-                  onCheckedChange={c => updateSecurity('encryption_at_rest', c)} 
-                />
-              </div>
+              
+              {/* OPCIÓN DE ENCRIPTACIÓN ELIMINADA */}
+
               <div className="pt-2">
                 <Label>Retención de logs (días)</Label>
                 <Input 
