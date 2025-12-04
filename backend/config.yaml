@@ -4,15 +4,14 @@ settings:
   extraction_window_days: 90
   security:
     audit_detailed: true
-    encryption_at_rest: false
     log_retention_days: 90
   scheduler:
-    enabled: false
-    auto_retry: false
+    enabled: true
+    auto_retry: true
     timeout_minutes: 30
-    interval_minutes: 5
+    interval_minutes: 30
   notifications:
-    enabled: false
+    enabled: true
     email: ''
     daily_summary: false
 databases:

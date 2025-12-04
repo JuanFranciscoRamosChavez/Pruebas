@@ -1,5 +1,37 @@
 [
     {
+        "timestamp": "2025-12-04T13:19:32.132077",
+        "table": "detalle_ordenes",
+        "status": "SUCCESS",
+        "mode": "FULL",
+        "records": 20,
+        "details": "OK"
+    },
+    {
+        "timestamp": "2025-12-04T13:19:29.275502",
+        "table": "ordenes",
+        "status": "SUCCESS",
+        "mode": "FULL",
+        "records": 20,
+        "details": "OK"
+    },
+    {
+        "timestamp": "2025-12-04T13:19:26.337753",
+        "table": "clientes",
+        "status": "SUCCESS",
+        "mode": "FULL",
+        "records": 20,
+        "details": "OK"
+    },
+    {
+        "timestamp": "2025-12-04T13:19:23.178076",
+        "table": "inventario",
+        "status": "SUCCESS",
+        "mode": "FULL",
+        "records": 20,
+        "details": "OK"
+    },
+    {
         "timestamp": "2025-12-03T18:58:42.942117",
         "table": "inventario",
         "status": "SUCCESS",
