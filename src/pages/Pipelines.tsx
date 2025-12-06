@@ -88,7 +88,6 @@ const Pipelines = ({ userRole }: PipelinesProps) => {
         }
       }
     } catch (e) {
-      console.error(e);
       toast.error("No se pudieron cargar las tablas");
       setAvailableTables([]);
     } finally {
@@ -96,7 +95,6 @@ const Pipelines = ({ userRole }: PipelinesProps) => {
     }
   };
 
-  // Utility para mostrar errores bonitos
   const showSmartError = (title: string, message: string) => {
     const isSecurityError = message.includes("SEGURIDAD") || message.includes("SECURITY");
     
@@ -123,7 +121,6 @@ const Pipelines = ({ userRole }: PipelinesProps) => {
     try {
         const response = await fetch('http://localhost:5000/api/backup', { method: 'POST' });
         const data = await response.json();
-        
         if (response.ok) {
             toast.dismiss(toastId);
             toast.success("Respaldo Seguro Creado", { description: `Archivo: ${data.file}` });
@@ -314,7 +311,6 @@ const Pipelines = ({ userRole }: PipelinesProps) => {
       <Header title="Gestion de Pipelines" description="Control de migracion de datos sensibles" />
       <div className="p-6 space-y-6">
         
-        {/* BARRA SUPERIOR DE ACCIONES */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <span className="text-sm text-muted-foreground bg-muted px-3 py-1 rounded-full border border-border/50 flex items-center gap-2">
@@ -350,34 +346,32 @@ const Pipelines = ({ userRole }: PipelinesProps) => {
                                 <DialogDescription>Reiniciar base de datos con datos aleatorios.</DialogDescription>
                             </DialogHeader>
                             
-                            {/* --- AVISO DE SEGURIDAD CORREGIDO (GRIS/MUTED) --- */}
-                            <div className="bg-muted/50 border border-border rounded-lg p-4 my-2 flex flex-col gap-3">
+                            {/* AVISO DE SEGURIDAD CORREGIDO (ESTILO LIMPIO) */}
+                            <div className="bg-background border border-border rounded-lg p-4 my-2 flex flex-col gap-3 shadow-sm">
                                 <div className="flex gap-3">
-                                    <div className="p-2 bg-background rounded-full h-fit border border-border shadow-sm">
-                                        <AlertTriangle className="h-4 w-4 text-destructive" />
+                                    <div className="p-2 bg-muted rounded-full h-fit">
+                                        <AlertTriangle className="h-4 w-4 text-foreground" />
                                     </div>
                                     <div className="space-y-1">
-                                        <h4 className="text-sm font-semibold text-foreground">Advertencia de Datos</h4>
+                                        <h4 className="text-sm font-semibold text-foreground">Advertencia de Sobreescritura</h4>
                                         <p className="text-xs text-muted-foreground leading-relaxed">
-                                            Esta acción <strong>eliminará y sobrescribirá</strong> la información actual en Producción.
+                                            Esta acción <strong>eliminará permanentemente</strong> todos los datos actuales en Producción y QA.
                                         </p>
                                     </div>
                                 </div>
-                                
                                 <div className="flex justify-center pt-1">
                                     <Button 
                                         size="sm" 
                                         variant="outline" 
-                                        className="w-full bg-background hover:bg-muted text-xs h-8 border-border"
+                                        className="w-full h-8"
                                         onClick={handleBackup} 
                                         disabled={isBackingUp}
                                     >
                                         <Save className="h-3.5 w-3.5 mr-2" /> 
-                                        {isBackingUp ? "Procesando..." : "Realizar copia de seguridad previa"}
+                                        {isBackingUp ? "Procesando..." : "Crear respaldo preventivo"}
                                     </Button>
                                 </div>
                             </div>
-                            {/* ------------------------------------------------ */}
 
                             <div className="grid gap-4 py-2">
                                 <div className="grid grid-cols-2 items-center gap-4"><Label>Inventario</Label><Input type="number" value={seedCounts.productos} onChange={(e) => setSeedCounts({...seedCounts, productos: Number(e.target.value)})} /></div>
