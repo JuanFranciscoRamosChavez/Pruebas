@@ -1,5 +1,61 @@
 [
     {
+        "timestamp": "2025-12-05T14:34:10.546274",
+        "table": "inventario",
+        "status": "SUCCESS",
+        "mode": "INCREMENTAL",
+        "records": 1,
+        "details": "OK"
+    },
+    {
+        "timestamp": "2025-12-05T14:27:57.578836",
+        "table": "detalle_ordenes",
+        "status": "SUCCESS",
+        "mode": "FULL",
+        "records": 100,
+        "details": "OK"
+    },
+    {
+        "timestamp": "2025-12-05T14:27:55.309001",
+        "table": "ordenes",
+        "status": "SUCCESS",
+        "mode": "FULL",
+        "records": 100,
+        "details": "OK"
+    },
+    {
+        "timestamp": "2025-12-05T14:25:49.000858",
+        "table": "clientes",
+        "status": "SUCCESS",
+        "mode": "FULL",
+        "records": 20,
+        "details": "OK"
+    },
+    {
+        "timestamp": "2025-12-05T14:24:05.820170",
+        "table": "inventario",
+        "status": "SUCCESS",
+        "mode": "FULL",
+        "records": 20,
+        "details": "OK"
+    },
+    {
+        "timestamp": "2025-12-05T09:36:15.657709",
+        "table": "inventario",
+        "status": "SUCCESS",
+        "mode": "FULL",
+        "records": 20,
+        "details": "OK"
+    },
+    {
+        "timestamp": "2025-12-05T09:01:29.899270",
+        "table": "inventario",
+        "status": "SUCCESS",
+        "mode": "FULL",
+        "records": 100,
+        "details": "OK"
+    },
+    {
         "timestamp": "2025-12-04T13:19:32.132077",
         "table": "detalle_ordenes",
         "status": "SUCCESS",

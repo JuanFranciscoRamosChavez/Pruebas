@@ -2,30 +2,25 @@ import { Pipeline } from "@/types/pipeline";
 import { StatusBadge } from "./StatusBadge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Play, Settings, Database, Shield, Clock, ArrowRight } from "lucide-react";
-import { formatDistanceToNow, differenceInMinutes } from "date-fns"; // Importamos differenceInMinutes
+import { Play, Database, Shield, Clock, ArrowRight } from "lucide-react";
+import { formatDistanceToNow, differenceInMinutes } from "date-fns";
 import { es } from "date-fns/locale";
 
 interface PipelineCardProps {
   pipeline: Pipeline;
   onRun?: (id: string) => void;
-  onConfigure?: (id: string) => void;
 }
 
-export function PipelineCard({ pipeline, onRun, onConfigure }: PipelineCardProps) {
+export function PipelineCard({ pipeline, onRun }: PipelineCardProps) {
   
   // Lógica para determinar el estado visual
   let displayStatus = pipeline.status;
 
-  // Si hay una fecha de última ejecución y el estado NO es 'running' (ejecutando)
   if (pipeline.lastRun && pipeline.status !== 'running') {
     const lastRunDate = new Date(pipeline.lastRun);
     const now = new Date();
-    
-    // Calculamos la diferencia en minutos
     const minutesSinceLastRun = differenceInMinutes(now, lastRunDate);
 
-    // Si pasaron más de 30 minutos, forzamos el estado a 'idle' (Inactivo)
     if (minutesSinceLastRun > 30) {
       displayStatus = 'idle';
     }
@@ -48,7 +43,6 @@ export function PipelineCard({ pipeline, onRun, onConfigure }: PipelineCardProps
               {pipeline.description}
             </p>
           </div>
-          {/* Usamos displayStatus en lugar de pipeline.status */}
           <StatusBadge status={displayStatus} />
         </div>
       </CardHeader>
@@ -106,17 +100,10 @@ export function PipelineCard({ pipeline, onRun, onConfigure }: PipelineCardProps
             size="sm"
             className="flex-1"
             onClick={() => onRun?.(pipeline.id)}
-            disabled={pipeline.status === 'running'}
+            disabled={pipeline.status === 'running' || !onRun}
           >
             <Play className="h-4 w-4" />
             {pipeline.status === 'running' ? 'Ejecutando...' : 'Ejecutar'}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => onConfigure?.(pipeline.id)}
-          >
-            <Settings className="h-4 w-4" />
           </Button>
         </div>
       </CardContent>

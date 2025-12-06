@@ -9,7 +9,7 @@ settings:
     enabled: true
     auto_retry: true
     timeout_minutes: 30
-    interval_minutes: 30
+    interval_minutes: 31
   notifications:
     enabled: true
     email: ''
