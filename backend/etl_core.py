@@ -60,28 +60,27 @@ class ETLEngine:
         try:
             # A) Verificar Origen (Debe ser 'production')
             with self.engine_prod.connect() as conn:
-                # Verificamos si existe la tabla de metadatos (postgres specific check)
                 check_table = conn.execute(text("SELECT to_regclass('public._db_meta')")).scalar()
                 
                 if not check_table:
-                     logger.warning(" [SEGURIDAD] Base Origen SIN firma digital (_db_meta). Se asume riesgo.")
+                     logger.warning("⚠️ [SEGURIDAD] Base Origen SIN firma digital (_db_meta). Se asume riesgo.")
                 else:
                     env = conn.execute(text("SELECT value FROM _db_meta WHERE key='env'")).scalar()
                     if env != 'production':
-                        raise Exception(f" [BLOQUEO] La base origen es '{env}', se requiere 'production'.")
+                        raise Exception(f"⛔ [BLOQUEO] La base origen es '{env}', se requiere 'production'. ¿Credenciales invertidas?")
 
             # B) Verificar Destino (Debe ser 'qa')
             with self.engine_qa.connect() as conn:
                 check_table = conn.execute(text("SELECT to_regclass('public._db_meta')")).scalar()
                 
                 if not check_table:
-                    logger.warning(" [SEGURIDAD] Base Destino SIN firma digital. Se asume riesgo.")
+                    logger.warning("⚠️ [SEGURIDAD] Base Destino SIN firma digital. Se asume riesgo.")
                 else:
                     env = conn.execute(text("SELECT value FROM _db_meta WHERE key='env'")).scalar()
                     if env != 'qa':
-                        raise Exception(f" [BLOQUEO] La base destino es '{env}', se requiere 'qa'. NO SE SOBREESCRIBIRÁ.")
+                        raise Exception(f"⛔ [BLOQUEO] La base destino es '{env}', se requiere 'qa'. PROTECCIÓN DE DATOS ACTIVADA.")
             
-            logger.info(" Validación de entornos correcta.")
+            logger.info("✅ Validación de entornos correcta.")
 
         except Exception as e:
             logger.error(str(e))
@@ -96,10 +95,10 @@ class ETLEngine:
         elif rule == 'redact': return "****"
         return value
 
-    # --- SISTEMA DE BACKUP ---
+    # --- SISTEMA DE BACKUP CIFRADO ---
     def _get_schema_definition(self):
         return """
--- ESTRUCTURA LIMPIA
+-- ESTRUCTURA DE LA BASE DE DATOS
 DROP TABLE IF EXISTS detalle_ordenes, ordenes, inventario, clientes, auditoria, _db_meta CASCADE;
 
 CREATE TABLE clientes (id INTEGER PRIMARY KEY, nombre VARCHAR(100), email VARCHAR(100), telefono VARCHAR(50), direccion VARCHAR(200), fecha_registro TIMESTAMP);
@@ -107,7 +106,6 @@ CREATE TABLE inventario (id INTEGER PRIMARY KEY, producto VARCHAR(100) UNIQUE, s
 CREATE TABLE ordenes (id INTEGER PRIMARY KEY, cliente_id INTEGER REFERENCES clientes(id), total DECIMAL(10, 2), fecha TIMESTAMP);
 CREATE TABLE detalle_ordenes (id INTEGER PRIMARY KEY, orden_id INTEGER REFERENCES ordenes(id), producto VARCHAR(100) REFERENCES inventario(producto), cantidad INTEGER, precio_unitario DECIMAL(10, 2));
 CREATE TABLE IF NOT EXISTS auditoria (id SERIAL PRIMARY KEY, fecha_ejecucion TIMESTAMP, tabla VARCHAR(50), registros_procesados INTEGER, estado VARCHAR(100), mensaje TEXT, id_ejecucion VARCHAR(50), operacion VARCHAR(20), reglas_aplicadas TEXT, fecha_inicio TIMESTAMP, fecha_fin TIMESTAMP);
--- Metadatos para validación
 CREATE TABLE _db_meta (key VARCHAR PRIMARY KEY, value VARCHAR);
 """
 
@@ -122,7 +120,9 @@ CREATE TABLE _db_meta (key VARCHAR PRIMARY KEY, value VARCHAR);
                 for val in row:
                     if pd.isna(val): vals.append("NULL")
                     elif isinstance(val, (int, float)): vals.append(str(val))
-                    else: vals.append(f"'{str(val).replace("'", "''")}'")
+                    else: 
+                        clean = str(val).replace("'", "''")
+                        vals.append(f"'{clean}'")
                 sql.append(f"INSERT INTO {table_name} VALUES ({', '.join(vals)});")
             return "\n".join(sql) + "\n"
         except: return ""
@@ -137,20 +137,18 @@ CREATE TABLE _db_meta (key VARCHAR PRIMARY KEY, value VARCHAR);
             filename = f"backup_{ts}.sql.enc"
             filepath = os.path.join(backup_dir, filename)
             
-            logger.info(" Generando script SQL...")
+            logger.info("📦 Generando script SQL...")
             full_sql = f"-- RESPALDO {ts}\n-- App: {self.app_name}\n" + self._get_schema_definition()
             
-            # Datos Prod (Incluye marca de agua 'production' si existe en _db_meta)
             full_sql += "\n-- ORIGEN: PROD\n"
             for t in ['_db_meta', 'clientes', 'inventario', 'ordenes', 'detalle_ordenes']:
                 full_sql += self._generate_table_sql(self.engine_prod, t)
             
-            # Datos QA
             full_sql += "\n-- ORIGEN: QA (HISTORIAL)\n"
             for t in ['auditoria']:
                 full_sql += self._generate_table_sql(self.engine_qa, t)
 
-            logger.info(" Cifrando...")
+            logger.info("🔒 Cifrando...")
             fernet = Fernet(self.encryption_key.encode())
             with open(filepath, 'wb') as f:
                 f.write(fernet.encrypt(full_sql.encode('utf-8')))
@@ -198,7 +196,6 @@ CREATE TABLE _db_meta (key VARCHAR PRIMARY KEY, value VARCHAR);
                 with open(path, 'r', encoding='utf-8') as f: history = json.load(f)
             
             history.insert(0, event)
-            # Filtrar por fecha y limitar a 1000
             history = [h for h in history if datetime.fromisoformat(h['timestamp']) > cutoff][:1000]
 
             with open(path, 'w', encoding='utf-8') as f:
@@ -220,11 +217,9 @@ CREATE TABLE _db_meta (key VARCHAR PRIMARY KEY, value VARCHAR);
         for attempt in range(1, self.max_retries + 1):
             start_time = datetime.now()
             try:
-                # Mensaje de intento
                 log_suffix = f" (Intento {attempt})" if attempt > 1 else ""
                 logger.info(f"[INFO] Procesando {table}{log_suffix}...")
                 
-                # Lógica Incremental vs Full
                 last_date = self.get_max_date(table, filter_col)
                 query = f"SELECT * FROM {table}"
                 mode = "FULL"
@@ -232,53 +227,40 @@ CREATE TABLE _db_meta (key VARCHAR PRIMARY KEY, value VARCHAR);
                     query += f" WHERE {filter_col} > '{last_date}'"
                     mode = "INCREMENTAL"
                 
-                # Extracción
                 df = pd.read_sql(query, self.engine_prod)
                 if df.empty: 
                     logger.info(f"   [SKIP] {table}: Sin novedades.")
                     return 
 
-                # Muestreo
                 total_extracted = len(df)
                 if sample_percent < 100:
                     df = df.sample(frac=sample_percent/100, random_state=42)
                     logger.info(f"   [SAMPLE] Usando {sample_percent}% ({len(df)}/{total_extracted})")
                 
-                # Enmascaramiento
                 for col, rule in table_conf.get('masking_rules', {}).items():
                     if col in df.columns: df[col] = df[col].apply(lambda x: self.mask_value(x, rule))
 
-                # Carga (Load)
                 with self.engine_qa.connect() as conn:
-                    # Desactivar FKs
                     conn.execute(text("SET session_replication_role = 'replica';"))
-                    
-                    # Deduplicación (Idempotencia)
                     if not df.empty:
                         ids = [str(x) for x in df[pk].tolist()]
                         conn.execute(text(f"DELETE FROM {table} WHERE {pk} IN ({','.join(ids)})"))
                     
-                    # Insertar usando Batch Size configurado
                     if not df.empty:
                         df.to_sql(table, conn, if_exists='append', index=False, method='multi', chunksize=self.batch_size)
                     
-                    # Restaurar FKs
                     conn.execute(text("SET session_replication_role = 'origin';"))
                     conn.commit()
                 
                 end_time = datetime.now()
-                duration = (end_time - start_time).total_seconds()
-                
                 self.log_audit(table, len(df), f"SUCCESS - {mode}", None, start_time, end_time)
                 self.save_json_report(table, "SUCCESS", len(df), mode)
-                
-                logger.info(f"[OK] {table} completado en {duration:.2f}s")
+                logger.info(f"[OK] {table}: Completado.")
                 return 
 
             except Exception as e:
                 end_time = datetime.now()
                 logger.error(f"[ERROR] {table}: {e}")
-                
                 if attempt == self.max_retries:
                     self.log_audit(table, 0, "ERROR", str(e), start_time, end_time)
                     self.save_json_report(table, "ERROR", 0, "FAILED", str(e))
@@ -290,6 +272,13 @@ CREATE TABLE _db_meta (key VARCHAR PRIMARY KEY, value VARCHAR);
         self.cleanup_old_logs()
         
         for table_conf in self.config['tables']:
+            is_active = table_conf.get('active', True)
+            is_forced = (target_table == table_conf['name'])
+            
+            if not is_active and not is_forced:
+                logger.info(f"   [SKIP] {table_conf['name']} está desactivado.")
+                continue
+
             if target_table and table_conf['name'] != target_table: continue 
             self.process_table(table_conf, override_percent)
 

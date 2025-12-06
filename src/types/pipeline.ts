@@ -11,7 +11,8 @@ export interface Pipeline {
   nextRun?: string;
   tablesCount: number;
   maskingRulesCount: number;
-  recordsProcessed?: number; // Para la tarjeta del pipeline
+  recordsProcessed?: number;
+  isActive?: boolean;
 }
 
 export interface ExecutionLog {
@@ -22,9 +23,7 @@ export interface ExecutionLog {
   startTime: string;
   endTime?: string;
   duration?: number;
-  // --- AGREGAR ESTA LÍNEA ---
   recordsProcessed: number; 
-  // --------------------------
   recordsExtracted?: number;
   recordsMasked?: number;
   recordsLoaded?: number;
