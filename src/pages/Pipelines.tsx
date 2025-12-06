@@ -2,7 +2,7 @@ import { Layout } from "@/components/Layout";
 import { Header } from "@/components/Header";
 import { PipelineCard } from "@/components/PipelineCard";
 import { Button } from "@/components/ui/button";
-import { Plus, Database, Lock, RefreshCw, Percent, Play, Layers, Sprout } from "lucide-react";
+import { Database, Lock, RefreshCw, Percent, Play, Layers, Sprout, Save, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { useState, useEffect } from "react";
 import { Pipeline } from "@/types/pipeline";
@@ -19,7 +19,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface PipelinesProps {
   userRole?: string;
@@ -30,12 +29,10 @@ const Pipelines = ({ userRole }: PipelinesProps) => {
   const [loading, setLoading] = useState(true);
   
   // Modals
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isRunModalOpen, setIsRunModalOpen] = useState(false);
   const [isSeedModalOpen, setIsSeedModalOpen] = useState(false);
 
   // States
-  const [newJob, setNewJob] = useState({ name: "", table: "" });
   const [targetPipeline, setTargetPipeline] = useState<string | null>(null);
   const [runPercentage, setRunPercentage] = useState(100);
   const [isRunning, setIsRunning] = useState(false);
@@ -45,12 +42,12 @@ const Pipelines = ({ userRole }: PipelinesProps) => {
     productos: 30, 
     clientes: 50, 
     ordenes: 100,
-    detalles: 300
+    detalles: 300 
   });
   const [isSeeding, setIsSeeding] = useState(false);
-
-  const [availableTables, setAvailableTables] = useState<string[]>([]);
-  const [isLoadingTables, setIsLoadingTables] = useState(false);
+  
+  // Backup State
+  const [isBackingUp, setIsBackingUp] = useState(false);
 
   const fetchPipelines = async () => {
     setLoading(true);
@@ -72,21 +69,30 @@ const Pipelines = ({ userRole }: PipelinesProps) => {
 
   useEffect(() => { fetchPipelines(); }, []);
 
-  const loadTables = async () => {
-    setIsLoadingTables(true);
+  // --- FUNCIÓN DE RESPALDO CIFRADO ---
+  const handleBackup = async () => {
+    setIsBackingUp(true);
+    const toastId = toast.loading("Generando respaldo SQL Cifrado...");
+    
     try {
-      const res = await fetch('http://localhost:5000/api/source/tables');
-      if (res.ok) {
-        const tables = await res.json();
-        if (Array.isArray(tables)) {
-          setAvailableTables(tables);
-          toast.success(`Se detectaron ${tables.length} tablas en Produccion`);
+        const response = await fetch('http://localhost:5000/api/backup', {
+            method: 'POST'
+        });
+        const data = await response.json();
+        
+        if (response.ok) {
+            toast.dismiss(toastId);
+            toast.success("Respaldo Seguro Creado", { 
+                description: `Archivo guardado en el servidor: ${data.file}` 
+            });
+        } else {
+            throw new Error(data.error || "Error al respaldar");
         }
-      }
-    } catch (e) {
-      toast.error("No se pudieron cargar las tablas");
+    } catch (e: any) {
+        toast.dismiss(toastId);
+        toast.error("Error de Respaldo", { description: e.message });
     } finally {
-      setIsLoadingTables(false);
+        setIsBackingUp(false);
     }
   };
 
@@ -171,34 +177,6 @@ const Pipelines = ({ userRole }: PipelinesProps) => {
     }
   };
 
-  const handleCreateJob = async () => {
-    if (userRole !== 'admin') return toast.error("Acceso Denegado");
-    if (!newJob.name || !newJob.table) return toast.error("Faltan datos");
-
-    const toastId = toast.loading("Configurando pipeline...");
-
-    try {
-      const response = await fetch('http://localhost:5000/api/pipelines', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newJob)
-      });
-
-      if (response.ok) {
-        toast.dismiss(toastId);
-        toast.success("Pipeline Creado");
-        setIsCreateModalOpen(false);
-        setNewJob({ name: "", table: "" });
-        fetchPipelines(); 
-      } else {
-        throw new Error("Error al crear");
-      }
-    } catch (error: any) {
-      toast.dismiss(toastId);
-      toast.error("Error al crear");
-    }
-  };
-
   return (
     <Layout>
       <Header title="Gestion de Pipelines" description="Control de migracion de datos sensibles" />
@@ -217,22 +195,70 @@ const Pipelines = ({ userRole }: PipelinesProps) => {
           </div>
 
           <div className="flex gap-2">
-            {/* BOTÓN GENERAR DATOS (Solo DBA) */}
+            
+            {/* BOTÓN 1: RESPALDO (SOLO DBA) */}
+            {userRole === 'admin' && (
+                <Button 
+                    variant="outline" 
+                    // Estilo sutil que encaja con el tema (borde suave, hover suave)
+                    className="gap-2"
+                    onClick={handleBackup}
+                    disabled={isBackingUp}
+                >
+                    <Save className={`h-4 w-4 ${isBackingUp ? 'animate-pulse' : ''}`} />
+                    {isBackingUp ? "Guardando..." : "Crear Respaldo"}
+                </Button>
+            )}
+
+            {/* BOTÓN 2: GENERAR DATOS (SOLO DBA) */}
             {userRole === 'admin' && (
                 <Dialog open={isSeedModalOpen} onOpenChange={setIsSeedModalOpen}>
                     <DialogTrigger asChild>
-                        <Button variant="outline" className="text-green-600 border-green-600/30 hover:bg-green-50 hover:text-green-700">
-                            <Sprout className="h-4 w-4 mr-2" />
+                        {/* ESTILO CORREGIDO: Usamos colores del tema (foreground/background) con un toque sutil */}
+                        <Button 
+                            variant="outline"
+                            className="gap-2 hover:bg-muted/80"
+                        >
+                            <Sprout className="h-4 w-4 text-green-600" />
                             Generar Datos Fuente
                         </Button>
                     </DialogTrigger>
-                    <DialogContent className="sm:max-w-[400px]">
+                    <DialogContent className="sm:max-w-[450px]">
                         <DialogHeader>
                             <DialogTitle>Sembrar Datos en Producción</DialogTitle>
                             <DialogDescription>
-                                ADVERTENCIA: Esto borrará los datos actuales y generará nuevos.
+                                Configura el volumen de datos a generar aleatoriamente.
                             </DialogDescription>
                         </DialogHeader>
+                        
+                        {/* AVISO DE SEGURIDAD - ESTILO UNIFICADO (GRIS/MUTED) */}
+                        <div className="bg-muted/40 border border-primary/10 rounded-md p-4 my-2 text-sm text-foreground flex flex-col gap-3">
+                            <div className="flex items-start gap-3">
+                                {/* Icono naranja para mantener la atención, pero fondo neutro */}
+                                <AlertTriangle className="h-5 w-5 mt-0.5 text-orange-500 shrink-0" />
+                                <div className="space-y-1">
+                                    <p className="font-semibold">¡Atención!</p>
+                                    <p className="text-muted-foreground text-xs">
+                                        Esta acción <strong>borrará permanentemente</strong> todos los datos actuales en Producción y QA para generar nuevos registros.
+                                    </p>
+                                </div>
+                            </div>
+                            
+                            {/* BOTÓN DE AVISO CENTRADO Y LIMPIO */}
+                            <div className="flex justify-center pt-1">
+                                <Button 
+                                    size="sm" 
+                                    variant="outline" 
+                                    className="h-8 gap-2 border-primary/20 hover:bg-background hover:text-primary transition-colors"
+                                    onClick={handleBackup}
+                                    disabled={isBackingUp}
+                                >
+                                    <Save className="h-3.5 w-3.5" />
+                                    {isBackingUp ? "Realizando copia..." : "Recomendado: Hacer copia de seguridad antes"}
+                                </Button>
+                            </div>
+                        </div>
+
                         <div className="grid gap-4 py-2">
                             <div className="grid grid-cols-2 items-center gap-4">
                                 <Label htmlFor="prods">Inventario (Productos)</Label>
@@ -252,76 +278,30 @@ const Pipelines = ({ userRole }: PipelinesProps) => {
                             </div>
                         </div>
                         <DialogFooter>
-                            <Button variant="destructive" onClick={handleSeedData} disabled={isSeeding}>
-                                {isSeeding ? <RefreshCw className="animate-spin h-4 w-4" /> : "Confirmar Regeneración"}
+                            <Button variant="default" onClick={handleSeedData} disabled={isSeeding || isBackingUp}>
+                                {isSeeding ? <RefreshCw className="animate-spin h-4 w-4 mr-2" /> : null}
+                                {isSeeding ? "Generando..." : "Confirmar Regeneración"}
                             </Button>
                         </DialogFooter>
                     </DialogContent>
                 </Dialog>
             )}
 
-            {/* BOTÓN EJECUTAR TODO (Solo DBA) */}
+            {/* BOTÓN EJECUTAR TODO (SOLO DBA) */}
             {userRole === 'admin' ? (
                 <Button 
                     variant="default" 
-                    className="bg-orange-600 hover:bg-orange-700 text-white"
+                    className="bg-orange-600 hover:bg-orange-700 text-white gap-2"
                     onClick={openAllRun}
                     disabled={isRunning || pipelines.length === 0}
                 >
-                    <Layers className="h-4 w-4 mr-2" />
+                    <Layers className="h-4 w-4" />
                     {isRunning ? "Procesando..." : "Ejecutar Todo"}
                 </Button>
             ) : (
                 <Button disabled variant="secondary" className="opacity-70 cursor-not-allowed">
                     <Lock className="h-3 w-3 mr-2" /> Solo Lectura
                 </Button>
-            )}
-
-            {/* BOTÓN NUEVO PIPELINE (Solo DBA) */}
-            {userRole === 'admin' && (
-                <Dialog open={isCreateModalOpen} onOpenChange={(open) => { setIsCreateModalOpen(open); if (open) loadTables(); }}>
-                    <DialogTrigger asChild>
-                        <Button disabled={isRunning}>
-                            <Plus className="h-4 w-4 mr-2" /> Nuevo Pipeline
-                        </Button>
-                    </DialogTrigger>
-                    <DialogContent className="sm:max-w-[425px] bg-card border-border">
-                        <DialogHeader>
-                            <DialogTitle>Auto-Discovery Pipeline</DialogTitle>
-                            <DialogDescription>Detectar tablas disponibles en Produccion.</DialogDescription>
-                        </DialogHeader>
-                        <div className="grid gap-4 py-4">
-                            <div className="grid gap-2">
-                                <Label htmlFor="table">Tabla Origen</Label>
-                                <Select onValueChange={(val) => {
-                                    setNewJob({ table: val, name: `Migracion ${val.charAt(0).toUpperCase() + val.slice(1)}` });
-                                }}>
-                                    <SelectTrigger>
-                                        <SelectValue placeholder={isLoadingTables ? "Escaneando..." : "Seleccionar tabla..."} />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {availableTables.map((table) => (
-                                            <SelectItem key={table} value={table}>{table}</SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                            <div className="grid gap-2">
-                                <Label htmlFor="name">Nombre del Job</Label>
-                                <Input 
-                                    id="name" 
-                                    value={newJob.name}
-                                    onChange={(e) => setNewJob({...newJob, name: e.target.value})}
-                                />
-                            </div>
-                        </div>
-                        <DialogFooter>
-                            <Button onClick={handleCreateJob} disabled={isLoadingTables}>
-                                {isLoadingTables ? <RefreshCw className="animate-spin h-4 w-4" /> : "Auto-Configurar"}
-                            </Button>
-                        </DialogFooter>
-                    </DialogContent>
-                </Dialog>
             )}
           </div>
         </div>

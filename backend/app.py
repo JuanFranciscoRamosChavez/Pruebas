@@ -2,6 +2,8 @@ import yaml
 import os
 import logging
 import atexit
+import time  # <--- FALTABA ESTE
+from datetime import datetime # <--- FALTABA ESTE
 from flask import Flask, jsonify, request, send_file
 from flask_cors import CORS
 from etl_core import ETLEngine
@@ -79,6 +81,23 @@ def get_dashboard():
             "chart_data": chart_data, "recent_activity": recent_activity, "system_status": system_status
         })
     except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# --- ENDPOINT BACKUP CIFRADO ---
+@app.route('/api/backup', methods=['POST'])
+def trigger_backup():
+    try:
+        etl = ETLEngine()
+        filename = etl.create_encrypted_backup()
+        return jsonify({
+            "status": "success", 
+            "message": "Respaldo CIFRADO creado exitosamente (.sql.enc)", 
+            "file": filename
+        }), 200
+    except ValueError as ve:
+        return jsonify({"error": str(ve)}), 400
+    except Exception as e:
+        logger.error(f"Error backup: {e}")
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/connections', methods=['GET', 'POST', 'DELETE'])
@@ -276,23 +295,16 @@ def run_etl():
 @app.route('/api/history', methods=['GET'])
 def get_history():
     try:
-        # CAMBIO: Agregamos fecha_inicio y fecha_fin a la consulta
         with ETLEngine().engine_qa.connect() as conn:
             res = conn.execute(text("SELECT fecha_ejecucion, tabla, registros_procesados, estado, mensaje, fecha_inicio, fecha_fin FROM auditoria ORDER BY fecha_ejecucion DESC LIMIT 50"))
             history = []
             for r in res:
-                # Calcular duración en segundos si existen las fechas
                 duration = 0
-                if r[5] and r[6]: # r[5]=fecha_inicio, r[6]=fecha_fin
+                if r[5] and r[6]:
                      duration = (r[6] - r[5]).total_seconds()
-                
                 history.append({
-                    "fecha": str(r[0]), 
-                    "tabla": r[1], 
-                    "registros": r[2], 
-                    "estado": r[3], 
-                    "mensaje": r[4],
-                    "duration": duration # Enviamos la duración calculada
+                    "fecha": str(r[0]), "tabla": r[1], "registros": r[2], 
+                    "estado": r[3], "mensaje": r[4], "duration": duration
                 })
             return jsonify(history)
     except: return jsonify([])

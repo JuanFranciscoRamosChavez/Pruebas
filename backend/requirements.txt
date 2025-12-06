@@ -1,10 +1,11 @@
 # backend/requirements.txt
-faker
-PyYAML
-python-dotenv
-sqlalchemy
-psycopg2-binary  # Opymysql si usas MySQL
-pandas
-flask 
+flask
 flask-cors
+sqlalchemy
+psycopg2
+pyyaml
+pandas
+faker
+python-dotenv
 apscheduler
+cryptography
