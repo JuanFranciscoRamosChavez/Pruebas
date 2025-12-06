@@ -1,154 +1,136 @@
 import { ExecutionLog } from "@/types/pipeline";
-import { StatusBadge } from "./StatusBadge";
-import { Button } from "@/components/ui/button";
-import { ChevronDown, ChevronUp, Clock, Database, Shield, AlertCircle } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { CheckCircle2, XCircle, Clock, Database, ArrowRight } from "lucide-react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { useState } from "react";
-import { cn } from "@/lib/utils";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 
 interface ExecutionLogRowProps {
   log: ExecutionLog;
 }
 
 export function ExecutionLogRow({ log }: ExecutionLogRowProps) {
-  const [isExpanded, setIsExpanded] = useState(false);
+  const isSuccess = log.status === 'success';
 
-  const formatDuration = (seconds?: number) => {
-    if (!seconds) return '-';
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
-  };
-
-  const formatDateTime = (dateString: string) => {
-    return format(new Date(dateString), "dd MMM yyyy, HH:mm:ss", { locale: es });
+  // --- LÓGICA DE FORMATEO DE DURACIÓN ---
+  const formatDuration = (seconds: number) => {
+    if (!seconds && seconds !== 0) return "-";
+    
+    // Menos de 1 segundo: mostrar ms
+    if (seconds < 1) {
+      return `${Math.round(seconds * 1000)}ms`;
+    }
+    // Menos de 1 minuto: mostrar segundos con 2 decimales
+    if (seconds < 60) {
+      return `${seconds.toFixed(2)}s`;
+    }
+    // Más de 1 minuto: mostrar minutos y segundos
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60);
+    return `${m}m ${s}s`;
   };
 
   return (
-    <div className="border border-border/50 rounded-lg overflow-hidden bg-card/50">
-      {/* Main Row */}
-      <div 
-        className="flex items-center gap-4 p-4 cursor-pointer hover:bg-muted/30 transition-colors"
-        onClick={() => setIsExpanded(!isExpanded)}
-      >
-        <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
-          {isExpanded ? (
-            <ChevronUp className="h-4 w-4" />
-          ) : (
-            <ChevronDown className="h-4 w-4" />
-          )}
-        </Button>
-
-        <div className="flex-1 min-w-0">
-          <p className="font-medium text-foreground truncate">{log.pipelineName}</p>
-          <p className="text-xs text-muted-foreground">
-            {formatDateTime(log.startTime)}
-          </p>
-        </div>
-
-        <StatusBadge status={log.status} size="sm" />
-
-        <div className="hidden sm:flex items-center gap-6 text-sm">
-          <div className="text-center">
-            <p className="font-medium text-foreground">{log.recordsExtracted.toLocaleString()}</p>
-            <p className="text-xs text-muted-foreground flex items-center gap-1">
-              <Database className="h-3 w-3" /> Extraídos
-            </p>
-          </div>
-          <div className="text-center">
-            <p className="font-medium text-foreground">{log.recordsMasked.toLocaleString()}</p>
-            <p className="text-xs text-muted-foreground flex items-center gap-1">
-              <Shield className="h-3 w-3" /> Enmascarados
-            </p>
-          </div>
-          <div className="text-center">
-            <p className="font-medium text-foreground">{log.recordsLoaded.toLocaleString()}</p>
-            <p className="text-xs text-muted-foreground flex items-center gap-1">
-              <Database className="h-3 w-3" /> Cargados
-            </p>
-          </div>
-          <div className="text-center min-w-[80px]">
-            <p className="font-medium text-foreground flex items-center gap-1">
-              <Clock className="h-3 w-3" /> {formatDuration(log.duration)}
-            </p>
-            <p className="text-xs text-muted-foreground">Duración</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Expanded Details */}
-      {isExpanded && (
-        <div className="border-t border-border/50 p-4 bg-muted/20 animate-fade-in">
-          {/* Mobile Stats */}
-          <div className="sm:hidden grid grid-cols-2 gap-4 mb-4 pb-4 border-b border-border/50">
-            <div>
-              <p className="text-xs text-muted-foreground">Extraídos</p>
-              <p className="font-medium">{log.recordsExtracted.toLocaleString()}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Enmascarados</p>
-              <p className="font-medium">{log.recordsMasked.toLocaleString()}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Cargados</p>
-              <p className="font-medium">{log.recordsLoaded.toLocaleString()}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Duración</p>
-              <p className="font-medium">{formatDuration(log.duration)}</p>
-            </div>
-          </div>
-
-          {log.errors.length > 0 ? (
-            <div className="space-y-2">
-              <p className="text-sm font-medium text-foreground flex items-center gap-2">
-                <AlertCircle className="h-4 w-4 text-destructive" />
-                Errores ({log.errors.length})
-              </p>
-              <div className="space-y-2">
-                {log.errors.map((error) => (
-                  <div 
-                    key={error.id}
-                    className={cn(
-                      "p-3 rounded-md text-sm",
-                      error.severity === 'error' 
-                        ? "bg-destructive/10 border border-destructive/30"
-                        : "bg-warning/10 border border-warning/30"
-                    )}
-                  >
-                    <div className="flex items-start justify-between gap-2 mb-1">
-                      <p className={cn(
-                        "font-medium",
-                        error.severity === 'error' ? "text-destructive" : "text-warning"
-                      )}>
-                        {error.message}
-                      </p>
-                      <span className="text-xs text-muted-foreground whitespace-nowrap">
-                        {format(new Date(error.timestamp), "HH:mm:ss")}
-                      </span>
-                    </div>
-                    {error.table && (
-                      <p className="text-xs text-muted-foreground mb-1">
-                        Tabla: <code className="font-mono">{error.table}</code>
-                      </p>
-                    )}
-                    {error.details && (
-                      <p className="text-xs text-muted-foreground font-mono mt-2 p-2 bg-background/50 rounded">
-                        {error.details}
-                      </p>
-                    )}
-                  </div>
-                ))}
+    <Accordion type="single" collapsible className="w-full">
+      <AccordionItem value={log.id} className="border rounded-lg bg-card px-4">
+        <AccordionTrigger className="hover:no-underline py-3">
+          <div className="flex items-center justify-between w-full pr-4">
+            
+            {/* Columna 1: Estado y Nombre */}
+            <div className="flex items-center gap-4 min-w-[250px]">
+              {isSuccess ? (
+                <CheckCircle2 className="h-5 w-5 text-green-500" />
+              ) : (
+                <XCircle className="h-5 w-5 text-red-500" />
+              )}
+              <div className="text-left">
+                <p className="font-medium text-sm text-foreground">{log.pipelineName}</p>
+                <p className="text-xs text-muted-foreground">
+                  {format(new Date(log.startTime), "PP p", { locale: es })}
+                </p>
               </div>
             </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              Ejecución completada sin errores.
-            </p>
-          )}
-        </div>
-      )}
-    </div>
+
+            {/* Columna 2: Métricas */}
+            <div className="flex items-center gap-8 hidden md:flex">
+              <div className="text-center">
+                <p className="text-xs text-muted-foreground mb-0.5">Registros</p>
+                <span className="text-sm font-bold font-mono">
+                  {log.recordsProcessed?.toLocaleString() ?? 0}
+                </span>
+              </div>
+              
+              {/* DURACIÓN FORMATEADA */}
+              <div className="text-center">
+                <p className="text-xs text-muted-foreground mb-0.5">Duración</p>
+                <div className="flex items-center gap-1 justify-center">
+                  <Clock className="h-3 w-3 text-muted-foreground/70" />
+                  <span className="text-sm font-bold font-mono">
+                    {formatDuration(log.duration)}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Columna 3: Badge Estado */}
+            <Badge variant={isSuccess ? "outline" : "destructive"} className="capitalize">
+              {isSuccess ? "Exitoso" : "Fallido"}
+            </Badge>
+          </div>
+        </AccordionTrigger>
+        
+        <AccordionContent className="pt-2 pb-4 border-t border-border/50 mt-2">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            
+            {/* Detalles de Flujo */}
+            <div className="space-y-3">
+              <h4 className="text-xs font-semibold uppercase text-muted-foreground tracking-wider">Flujo de Datos</h4>
+              <div className="flex items-center gap-2 text-sm p-3 bg-muted/30 rounded-md border border-border/50">
+                <Database className="h-4 w-4 text-blue-500" />
+                <span>Producción</span>
+                <ArrowRight className="h-4 w-4 text-muted-foreground mx-2" />
+                <Database className="h-4 w-4 text-green-500" />
+                <span>QA (Enmascarado)</span>
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                <div className="p-2 bg-muted/20 rounded">
+                  <span className="block font-bold text-lg">{log.recordsExtracted ?? '-'}</span>
+                  <span className="text-muted-foreground">Extraídos</span>
+                </div>
+                <div className="p-2 bg-muted/20 rounded">
+                  <span className="block font-bold text-lg">{log.recordsMasked ?? '-'}</span>
+                  <span className="text-muted-foreground">Enmascarados</span>
+                </div>
+                <div className="p-2 bg-muted/20 rounded">
+                  <span className="block font-bold text-lg">{log.recordsLoaded ?? '-'}</span>
+                  <span className="text-muted-foreground">Cargados</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Errores o Mensajes */}
+            <div className="space-y-3">
+              <h4 className="text-xs font-semibold uppercase text-muted-foreground tracking-wider">
+                {isSuccess ? "Resumen" : "Detalle del Error"}
+              </h4>
+              <div className={`p-3 rounded-md text-sm border font-mono h-full max-h-[120px] overflow-y-auto ${
+                isSuccess 
+                  ? "bg-green-500/5 border-green-500/20 text-green-700" 
+                  : "bg-red-500/5 border-red-500/20 text-red-700"
+              }`}>
+                {log.errors && log.errors.length > 0 
+                  ? log.errors[0].message 
+                  : "Operación finalizada correctamente sin incidencias reportadas."}
+              </div>
+            </div>
+          </div>
+        </AccordionContent>
+      </AccordionItem>
+    </Accordion>
   );
 }

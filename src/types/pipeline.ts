@@ -3,40 +3,46 @@ export type PipelineStatus = 'idle' | 'running' | 'success' | 'error' | 'warning
 export interface Pipeline {
   id: string;
   name: string;
-  description: string;
+  description?: string;
   sourceDb: string;
   targetDb: string;
-  status: PipelineStatus;
+  status: 'idle' | 'running' | 'success' | 'error';
   lastRun?: string;
   nextRun?: string;
   tablesCount: number;
-  recordsProcessed?: number;
   maskingRulesCount: number;
-}
-
-export interface MaskingRule {
-  id: string;
-  name: string;
-  type: 'email' | 'phone' | 'name' | 'address' | 'ssn' | 'credit_card' | 'custom';
-  pattern?: string;
-  replacement: string;
-  tables: string[];
-  columns: string[];
-  isActive: boolean;
+  recordsProcessed?: number; // Para la tarjeta del pipeline
 }
 
 export interface ExecutionLog {
   id: string;
   pipelineId: string;
   pipelineName: string;
-  status: PipelineStatus;
+  status: 'success' | 'error' | 'running';
   startTime: string;
   endTime?: string;
   duration?: number;
-  recordsExtracted: number;
-  recordsMasked: number;
-  recordsLoaded: number;
-  errors: ExecutionError[];
+  // --- AGREGAR ESTA LÍNEA ---
+  recordsProcessed: number; 
+  // --------------------------
+  recordsExtracted?: number;
+  recordsMasked?: number;
+  recordsLoaded?: number;
+  errors?: {
+    id: string;
+    message: string;
+    timestamp: string;
+    severity: 'warning' | 'error';
+  }[];
+}
+
+export interface MaskingRule {
+  id: string;
+  name: string;
+  table: string;
+  column: string;
+  type: string;
+  isActive: boolean;
 }
 
 export interface ExecutionError {

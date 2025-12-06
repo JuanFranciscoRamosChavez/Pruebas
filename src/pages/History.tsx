@@ -3,29 +3,24 @@ import { Header } from "@/components/Header";
 import { ExecutionLogRow } from "@/components/ExecutionLogRow";
 import { Button } from "@/components/ui/button";
 import { Filter, RefreshCw, AlertCircle, CheckCircle2, XCircle, X } from "lucide-react";
-import { StatusBadge } from "@/components/StatusBadge";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ExecutionLog } from "@/types/pipeline";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
+  DropdownMenuCheckboxItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-  DropdownMenuCheckboxItem
 } from "@/components/ui/dropdown-menu";
-import { Badge } from "@/components/ui/badge";
 
 const History = () => {
   const [logs, setLogs] = useState<ExecutionLog[]>([]);
   const [loading, setLoading] = useState(true);
   
-  // Estado para el filtro ('all', 'success', 'error')
   const [statusFilter, setStatusFilter] = useState<'all' | 'success' | 'error'>('all');
 
-  // Función para obtener datos reales del Backend (Python)
   const fetchHistory = async () => {
     setLoading(true);
     try {
@@ -36,7 +31,6 @@ const History = () => {
         
         if (Array.isArray(data)) {
             const realLogs: ExecutionLog[] = data.map((item: any, index: number) => {
-                // Detectar éxito flexible (acepta "SUCCESS", "SUCCESS - INCREMENTAL", etc.)
                 const isSuccess = item.estado && item.estado.includes('SUCCESS');
                 
                 return {
@@ -45,7 +39,12 @@ const History = () => {
                 pipelineName: `Migración: ${item.tabla}`,
                 status: isSuccess ? 'success' : 'error',
                 startTime: item.fecha,
-                duration: 0,
+                duration: item.duration || 0,
+                
+                // --- AQUI AGREGAMOS EL CAMPO FALTANTE ---
+                recordsProcessed: item.registros, 
+                // ----------------------------------------
+                
                 recordsExtracted: item.registros,
                 recordsMasked: item.registros,
                 recordsLoaded: item.registros,
@@ -63,7 +62,6 @@ const History = () => {
       }
     } catch (error) {
       console.error(error);
-      // No mostramos error intrusivo al cargar, solo log
     } finally {
       setLoading(false);
     }
@@ -73,13 +71,11 @@ const History = () => {
     fetchHistory();
   }, []);
 
-  // Lógica de Filtrado en el Cliente
   const filteredLogs = logs.filter(log => {
       if (statusFilter === 'all') return true;
       return log.status === statusFilter;
   });
 
-  // Calcular estadísticas (basadas en datos totales)
   const statusCounts = {
     success: logs.filter(l => l.status === 'success').length,
     error: logs.filter(l => l.status === 'error').length,
@@ -119,7 +115,6 @@ const History = () => {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             
-            {/* --- BOTÓN FILTRAR FUNCIONAL --- */}
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                     <Button variant={statusFilter !== 'all' ? "secondary" : "outline"} size="sm" className="gap-2">
@@ -142,7 +137,6 @@ const History = () => {
                 </DropdownMenuContent>
             </DropdownMenu>
 
-            {/* Botón Limpiar Filtro */}
             {statusFilter !== 'all' && (
                 <Button variant="ghost" size="icon" onClick={() => setStatusFilter('all')} className="h-9 w-9">
                     <X className="h-4 w-4 text-muted-foreground" />
@@ -159,7 +153,6 @@ const History = () => {
           </span>
         </div>
 
-        {/* Lista de Logs */}
         <div className="space-y-3">
           {filteredLogs.length === 0 && !loading ? (
             <div className="text-center p-12 border-2 border-dashed rounded-xl bg-muted/5">
