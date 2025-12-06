@@ -96,6 +96,7 @@ const Pipelines = ({ userRole }: PipelinesProps) => {
     }
   };
 
+  // Utility para mostrar errores bonitos
   const showSmartError = (title: string, message: string) => {
     const isSecurityError = message.includes("SEGURIDAD") || message.includes("SECURITY");
     
@@ -119,7 +120,6 @@ const Pipelines = ({ userRole }: PipelinesProps) => {
   const handleBackup = async () => {
     setIsBackingUp(true);
     const toastId = toast.loading("Generando respaldo SQL Cifrado...");
-    
     try {
         const response = await fetch('http://localhost:5000/api/backup', { method: 'POST' });
         const data = await response.json();
@@ -141,7 +141,6 @@ const Pipelines = ({ userRole }: PipelinesProps) => {
   const handleSeedData = async () => {
     setIsSeeding(true);
     const toastId = toast.loading("Verificando entornos y generando datos...");
-    
     try {
       const response = await fetch('http://localhost:5000/api/source/seed', {
         method: 'POST',
@@ -341,7 +340,6 @@ const Pipelines = ({ userRole }: PipelinesProps) => {
 
                     <Dialog open={isSeedModalOpen} onOpenChange={setIsSeedModalOpen}>
                         <DialogTrigger asChild>
-                            {/* CAMBIO: Botón Verde Sólido para mejor contraste */}
                             <Button className="bg-emerald-600 hover:bg-emerald-700 text-white border-0">
                                 <Sprout className="h-4 w-4 mr-2" /> Generar Datos
                             </Button>
@@ -352,31 +350,34 @@ const Pipelines = ({ userRole }: PipelinesProps) => {
                                 <DialogDescription>Reiniciar base de datos con datos aleatorios.</DialogDescription>
                             </DialogHeader>
                             
-                            {/* ALERTA MEJORADA VISUALMENTE (Estilo neutro/warning) */}
-                            <div className="bg-amber-50/50 border border-amber-200 rounded-lg p-4 my-2 flex flex-col gap-3">
+                            {/* --- AVISO DE SEGURIDAD CORREGIDO (GRIS/MUTED) --- */}
+                            <div className="bg-muted/50 border border-border rounded-lg p-4 my-2 flex flex-col gap-3">
                                 <div className="flex gap-3">
-                                    <div className="p-2 bg-amber-100 rounded-full h-fit">
-                                        <AlertTriangle className="h-4 w-4 text-amber-600" />
+                                    <div className="p-2 bg-background rounded-full h-fit border border-border shadow-sm">
+                                        <AlertTriangle className="h-4 w-4 text-destructive" />
                                     </div>
                                     <div className="space-y-1">
-                                        <h4 className="text-sm font-semibold text-amber-900">¡Atención!</h4>
-                                        <p className="text-xs text-amber-700/80 leading-relaxed">
-                                            Esta acción <strong>borrará permanentemente</strong> todos los datos actuales en Producción y QA.
+                                        <h4 className="text-sm font-semibold text-foreground">Advertencia de Datos</h4>
+                                        <p className="text-xs text-muted-foreground leading-relaxed">
+                                            Esta acción <strong>eliminará y sobrescribirá</strong> la información actual en Producción.
                                         </p>
                                     </div>
                                 </div>
                                 
-                                {/* Botón de acción rápida dentro de la alerta */}
-                                <Button 
-                                    size="sm" 
-                                    className="w-full bg-white border border-amber-300 text-amber-800 hover:bg-amber-100 hover:text-amber-900 shadow-sm"
-                                    onClick={handleBackup} 
-                                    disabled={isBackingUp}
-                                >
-                                    <Save className="h-3.5 w-3.5 mr-2" /> 
-                                    {isBackingUp ? "Realizando copia..." : "Hacer copia de seguridad ahora"}
-                                </Button>
+                                <div className="flex justify-center pt-1">
+                                    <Button 
+                                        size="sm" 
+                                        variant="outline" 
+                                        className="w-full bg-background hover:bg-muted text-xs h-8 border-border"
+                                        onClick={handleBackup} 
+                                        disabled={isBackingUp}
+                                    >
+                                        <Save className="h-3.5 w-3.5 mr-2" /> 
+                                        {isBackingUp ? "Procesando..." : "Realizar copia de seguridad previa"}
+                                    </Button>
+                                </div>
                             </div>
+                            {/* ------------------------------------------------ */}
 
                             <div className="grid gap-4 py-2">
                                 <div className="grid grid-cols-2 items-center gap-4"><Label>Inventario</Label><Input type="number" value={seedCounts.productos} onChange={(e) => setSeedCounts({...seedCounts, productos: Number(e.target.value)})} /></div>
@@ -430,7 +431,6 @@ const Pipelines = ({ userRole }: PipelinesProps) => {
           </div>
         </div>
 
-        {/* MODAL DE EJECUCIÓN (Porcentaje) */}
         <Dialog open={isRunModalOpen} onOpenChange={setIsRunModalOpen}>
             <DialogContent className="sm:max-w-[425px] bg-card border-border">
                 <DialogHeader>
