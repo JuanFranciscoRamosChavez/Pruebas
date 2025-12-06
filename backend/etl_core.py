@@ -19,15 +19,12 @@ logger = logging.getLogger(__name__)
 class ETLEngine:
     def __init__(self):
         config_path = os.path.join(BASE_DIR, 'config.yaml')
-        # Carga con UTF-8
         with open(config_path, 'r', encoding='utf-8') as f:
             self.config = yaml.safe_load(f)
         
-        # --- CONFIGURACIÓN TÉCNICA ---
-        # Leemos el nombre y el batch size de la configuración
         settings = self.config.get('settings', {})
         self.app_name = settings.get('app_name', 'DataMask ETL')
-        self.batch_size = int(settings.get('batch_size', 1000)) # Default 1000 si no existe
+        self.batch_size = int(settings.get('batch_size', 1000))
         
         self.faker = Faker('es_MX')
         self.salt = os.getenv("HASH_SALT", "default_salt").encode()
@@ -64,19 +61,23 @@ class ETLEngine:
                 result = conn.execute(text("DELETE FROM auditoria WHERE fecha_ejecucion < :cutoff"), {"cutoff": cutoff_date})
                 conn.commit()
                 if result.rowcount > 0:
-                    logger.info(f"🧹 [CLEANUP] Se eliminaron {result.rowcount} registros de auditoría más antiguos de {days} días.")
+                    logger.info(f"🧹 [CLEANUP] Se eliminaron {result.rowcount} registros de auditoría antiguos.")
         except Exception as e:
             logger.error(f"[WARN] Error limpiando logs antiguos: {e}")
 
-    def log_audit(self, table, records, status, error=None):
+    # CAMBIO: Agregamos start_time y end_time
+    def log_audit(self, table, records, status, error=None, start_time=None, end_time=None):
         try:
             with self.engine_qa.connect() as conn:
                 conn.execute(text("""
-                    INSERT INTO auditoria (tabla, registros_procesados, estado, mensaje, fecha_ejecucion)
-                    VALUES (:t, :r, :s, :m, :f)
+                    INSERT INTO auditoria (tabla, registros_procesados, estado, mensaje, fecha_ejecucion, fecha_inicio, fecha_fin)
+                    VALUES (:t, :r, :s, :m, :f, :fi, :ff)
                 """), {
                     "t": table, "r": records, "s": status, 
-                    "m": str(error)[:500] if error else "OK", "f": datetime.now()
+                    "m": str(error)[:500] if error else "OK", 
+                    "f": datetime.now(),
+                    "fi": start_time, # Fecha Inicio
+                    "ff": end_time    # Fecha Fin
                 })
                 conn.commit()
         except Exception as e:
@@ -136,6 +137,8 @@ class ETLEngine:
             sample_percent = table_conf.get('sample_percent', 100)
         
         for attempt in range(1, self.max_retries + 1):
+            # CAMBIO: Capturar tiempo de inicio
+            start_time = datetime.now()
             try:
                 retry_msg = f" (Intento {attempt}/{self.max_retries})" if self.max_retries > 1 else ""
                 logger.info(f"[INFO] Procesando {table}{retry_msg}...")
@@ -174,36 +177,35 @@ class ETLEngine:
                         if ids_list:
                             safe_ids = [str(x) for x in ids_list]
                             id_str = ",".join(safe_ids)
-                            delete_query = f"DELETE FROM {table} WHERE {pk} IN ({id_str})"
-                            conn.execute(text(delete_query))
+                            conn.execute(text(f"DELETE FROM {table} WHERE {pk} IN ({id_str})"))
                     
                     if not df.empty:
-                        # --- CORRECCIÓN: Usar self.batch_size configurado ---
                         df.to_sql(table, conn, if_exists='append', index=False, method='multi', chunksize=self.batch_size)
                     
                     conn.execute(text("SET session_replication_role = 'origin';"))
                     conn.commit()
                 
-                self.log_audit(table, len(df), f"SUCCESS - {mode}")
+                # CAMBIO: Capturar tiempo final y enviarlo al log
+                end_time = datetime.now()
+                self.log_audit(table, len(df), f"SUCCESS - {mode}", None, start_time, end_time)
                 self.save_json_report(table, "SUCCESS", len(df), mode)
                 
-                logger.info(f"[OK] {table}: Sincronizacion completada.")
+                logger.info(f"[OK] {table}: Sincronizacion completada en {(end_time - start_time).total_seconds():.2f}s.")
                 return 
 
             except Exception as e:
+                end_time = datetime.now()
                 logger.error(f"[WARN] Fallo en intento {attempt}: {e}")
                 if attempt < self.max_retries:
                     time.sleep(self.retry_wait)
                 else:
                     logger.error(f"[ERROR] {table}: Se agotaron los reintentos.")
-                    self.log_audit(table, 0, "ERROR", str(e))
+                    self.log_audit(table, 0, "ERROR", str(e), start_time, end_time)
                     self.save_json_report(table, "ERROR", 0, "FAILED", str(e))
 
     def run_pipeline(self, target_table=None, override_percent=None):
-        # --- CORRECCIÓN: Usar el Nombre de la App en el log ---
         logger.info(f"[START] Iniciando Pipeline ({self.app_name})...")
         self.cleanup_old_logs()
-        
         for table_conf in self.config['tables']:
             if target_table and table_conf['name'] != target_table: continue 
             self.process_table(table_conf, override_percent)
