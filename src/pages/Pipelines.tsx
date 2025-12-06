@@ -2,7 +2,7 @@ import { Layout } from "@/components/Layout";
 import { Header } from "@/components/Header";
 import { PipelineCard } from "@/components/PipelineCard";
 import { Button } from "@/components/ui/button";
-import { Database, Lock, RefreshCw, Percent, Play, Layers, Sprout, Save, AlertTriangle } from "lucide-react";
+import { Database, Lock, RefreshCw, Percent, Play, Layers, Sprout, Save, AlertTriangle, ShieldAlert } from "lucide-react";
 import { toast } from "sonner";
 import { useState, useEffect } from "react";
 import { Pipeline } from "@/types/pipeline";
@@ -69,6 +69,28 @@ const Pipelines = ({ userRole }: PipelinesProps) => {
 
   useEffect(() => { fetchPipelines(); }, []);
 
+  // --- UTILIDAD PARA MOSTRAR ERRORES CON FORMATO ---
+  const showSmartError = (title: string, message: string) => {
+    // Detectamos si es un error de seguridad del Backend
+    const isSecurityError = message.includes("SEGURIDAD") || message.includes("SECURITY");
+    
+    toast.error(title, {
+        duration: isSecurityError ? 10000 : 5000, // Más tiempo si es crítico
+        description: (
+            <div className={`mt-2 p-3 rounded-md border text-xs whitespace-pre-wrap font-mono shadow-sm ${
+                isSecurityError 
+                    ? "bg-red-50 border-red-200 text-red-700 dark:bg-red-950/20 dark:border-red-900 dark:text-red-400" 
+                    : "bg-muted/50 border-border text-muted-foreground"
+            }`}>
+                {isSecurityError && <div className="flex items-center gap-2 mb-2 font-bold border-b border-red-200/50 pb-1">
+                    <ShieldAlert className="h-4 w-4" /> BLOQUEO DE SEGURIDAD
+                </div>}
+                {message}
+            </div>
+        )
+    });
+  };
+
   // --- FUNCIÓN DE RESPALDO CIFRADO ---
   const handleBackup = async () => {
     setIsBackingUp(true);
@@ -90,7 +112,7 @@ const Pipelines = ({ userRole }: PipelinesProps) => {
         }
     } catch (e: any) {
         toast.dismiss(toastId);
-        toast.error("Error de Respaldo", { description: e.message });
+        showSmartError("Error de Respaldo", e.message);
     } finally {
         setIsBackingUp(false);
     }
@@ -99,7 +121,7 @@ const Pipelines = ({ userRole }: PipelinesProps) => {
   // --- SEEDING (GENERAR DATOS) ---
   const handleSeedData = async () => {
     setIsSeeding(true);
-    const toastId = toast.loading("Generando datos semilla en Producción (Esto puede tardar)...");
+    const toastId = toast.loading("Verificando entornos y generando datos...");
     
     try {
       const response = await fetch('http://localhost:5000/api/source/seed', {
@@ -108,16 +130,21 @@ const Pipelines = ({ userRole }: PipelinesProps) => {
         body: JSON.stringify(seedCounts)
       });
 
+      // Si falla (por ejemplo, por seguridad), leemos el error JSON
+      const data = await response.json();
+
       if (response.ok) {
         toast.dismiss(toastId);
         toast.success("Datos Generados", { description: "La base de datos de producción ha sido reiniciada con nuevos datos." });
         setIsSeedModalOpen(false);
       } else {
-        throw new Error("Error al generar datos");
+        // Lanzamos el error con el mensaje que viene del backend
+        throw new Error(data.error || "Error desconocido en el servidor");
       }
-    } catch (error) {
+    } catch (error: any) {
       toast.dismiss(toastId);
-      toast.error("Fallo al generar datos");
+      // Usamos la nueva función visual
+      showSmartError("Fallo Crítico", error.message);
     } finally {
       setIsSeeding(false);
     }
@@ -165,12 +192,18 @@ const Pipelines = ({ userRole }: PipelinesProps) => {
         toast.success("Exito", { description: data.message });
         fetchPipelines();
       } else {
-        throw new Error(data.message || `Error ${response.status}`);
+        throw new Error(data.error || data.message || `Error ${response.status}`);
       }
     } catch (error: any) {
       toast.dismiss(toastId);
-      toast.error("Error", { description: error.message });
-      fetchPipelines();
+      // Usamos la nueva función visual aquí también
+      showSmartError("Ejecución Detenida", error.message);
+      
+      // Actualizamos estado visual a error
+      setPipelines(prev => prev.map(p => {
+          if (targetPipeline && p.id !== targetPipeline) return p;
+          return { ...p, status: 'error' };
+      }));
     } finally {
       setIsRunning(false);
       setTargetPipeline(null);
@@ -200,7 +233,6 @@ const Pipelines = ({ userRole }: PipelinesProps) => {
             {userRole === 'admin' && (
                 <Button 
                     variant="outline" 
-                    // Estilo sutil que encaja con el tema (borde suave, hover suave)
                     className="gap-2"
                     onClick={handleBackup}
                     disabled={isBackingUp}
@@ -214,12 +246,11 @@ const Pipelines = ({ userRole }: PipelinesProps) => {
             {userRole === 'admin' && (
                 <Dialog open={isSeedModalOpen} onOpenChange={setIsSeedModalOpen}>
                     <DialogTrigger asChild>
-                        {/* ESTILO CORREGIDO: Usamos colores del tema (foreground/background) con un toque sutil */}
                         <Button 
                             variant="outline"
-                            className="gap-2 hover:bg-muted/80"
+                            className="gap-2 hover:bg-muted/80 border-emerald-600 text-emerald-600 hover:bg-emerald-600 hover:text-white transition-colors"
                         >
-                            <Sprout className="h-4 w-4 text-green-600" />
+                            <Sprout className="h-4 w-4" />
                             Generar Datos Fuente
                         </Button>
                     </DialogTrigger>
@@ -231,10 +262,8 @@ const Pipelines = ({ userRole }: PipelinesProps) => {
                             </DialogDescription>
                         </DialogHeader>
                         
-                        {/* AVISO DE SEGURIDAD - ESTILO UNIFICADO (GRIS/MUTED) */}
                         <div className="bg-muted/40 border border-primary/10 rounded-md p-4 my-2 text-sm text-foreground flex flex-col gap-3">
                             <div className="flex items-start gap-3">
-                                {/* Icono naranja para mantener la atención, pero fondo neutro */}
                                 <AlertTriangle className="h-5 w-5 mt-0.5 text-orange-500 shrink-0" />
                                 <div className="space-y-1">
                                     <p className="font-semibold">¡Atención!</p>
@@ -244,7 +273,6 @@ const Pipelines = ({ userRole }: PipelinesProps) => {
                                 </div>
                             </div>
                             
-                            {/* BOTÓN DE AVISO CENTRADO Y LIMPIO */}
                             <div className="flex justify-center pt-1">
                                 <Button 
                                     size="sm" 
